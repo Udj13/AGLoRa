@@ -17,7 +17,7 @@ Modules used:
 
 // ========== GENERAL SETTINGS ========== 
 #define NAME_LENGTH 6                   // the same value for all devices
-char DEFAULT_ID[NAME_LENGTH] = "Rick";  // name of current tracker, NAME_LENGTH characters
+char MY_NAME[NAME_LENGTH] = "Rick";  // name of current tracker, NAME_LENGTH characters
 // ========== SERIAL DEBUGGING ========== 
 #define DEBUG_MODE true
 // ============ GPS SETTINGS ============ 
@@ -202,7 +202,7 @@ void sendData(float lat, float lon, unsigned short sat,
   loraDataPacket.minute = minute;
   loraDataPacket.second = second;
 
-  strcpy(loraDataPacket.id, DEFAULT_ID);
+  strcpy(loraDataPacket.id, MY_NAME);
 
 
   // send
@@ -316,7 +316,7 @@ void writeToBLE(char id[], float lat, float lon, unsigned char sat,
   Serial.write(0xAA); // BLE protocol version
 
   Serial.write(0x01); // start of heading
-  Serial.write(DEFAULT_ID);
+  Serial.write(MY_NAME);
   Serial.write(0x03); // end of text
 
   Serial.write(0x1D); //group separator
