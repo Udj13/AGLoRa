@@ -19,7 +19,7 @@ Modules used:
 #define NAME_LENGTH 6                   // the same value for all devices
 char MY_NAME[NAME_LENGTH] = "Rick";  // name of current tracker, NAME_LENGTH characters
 // ========== SERIAL DEBUGGING ========== 
-#define DEBUG_MODE true
+#define DEBUG_MODE false
 // ============ GPS SETTINGS ============ 
 #define GPS_PIN_RX 8
 #define GPS_PIN_TX 7
@@ -312,32 +312,33 @@ void writeToBLE(char id[], float lat, float lon, unsigned char sat,
     unsigned char b[4];
   } x;
 
-  Serial.write("AGLoRa"); // signature
-  Serial.write(0xAA); // BLE protocol version
+  // BLE protocol
+  Serial.write("AGLoRa");   // signature 6 bytes
+  Serial.write(0xAA);       // BLE protocol version, 1 byte
 
-  Serial.write(0x01); // start of heading
-  Serial.write(MY_NAME);
-  Serial.write(0x03); // end of text
+  Serial.write(0x01); // start of heading, 1 byte
+  Serial.write(MY_NAME);//NAME_LENGTH bytes
+  Serial.write(0x03); // end of text, 1 byte
 
-  Serial.write(0x1D); //group separator
-  Serial.write(0x02); // start of text
-  Serial.write(id);
-  Serial.write(0x03); // end of text
+  Serial.write(0x1D); //group separator, 1 byte
+  Serial.write(0x02); // start of text, 1 byte
+  Serial.write(id);   //NAME_LENGTH bytes
+  Serial.write(0x03); // end of text, 1 byte
 
   Serial.write(0x1E); //record separator
   x.val = lat;
-  Serial.write(x.b, 4);
+  Serial.write(x.b, 4);   //4 bytes
   x.val = lon;
-  Serial.write(x.b, 4);
-  Serial.write(sat);
-  Serial.write(year);
-  Serial.write(month);
-  Serial.write(day);
-  Serial.write(hour);
-  Serial.write(minute);
-  Serial.write(second);
+  Serial.write(x.b, 4);   //4 bytes
+  Serial.write(sat);      // 1 byte
+  Serial.write(year);     //2 bytes
+  Serial.write(month);    //1 byte
+  Serial.write(day);      //1 byte
+  Serial.write(hour);     //1 byte
+  Serial.write(minute);   //1 byte
+  Serial.write(second);   //1 byte
  
-  Serial.write(0x04); // end of transmission
+  Serial.write(0x04); // end of transmission, 1 byte
 }
 
 void readFromBLE() {
