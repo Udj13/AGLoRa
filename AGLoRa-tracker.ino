@@ -9,8 +9,8 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 Modules used:
-- Arduino UNO
-- GPS NMEA
+- Arduino UNO/Nano (ATMEGA328P, not ATmega168)
+- GPS NMEA Module (Generic)
 - LoRa EBYTE E220-900T22D (868 MHz) or EBYTE E32-E433T30D (433 MHz)
 - Bluetooth BLE AT-09 or HC-05
 */
@@ -20,11 +20,14 @@ Modules used:
 char MY_NAME[NAME_LENGTH] = "Rick";  // name of current tracker, NAME_LENGTH characters
 // ========== SERIAL DEBUGGING ========== 
 #define DEBUG_MODE false
+
+
+// ============ OTHER SETTINGS ========== 
 // ============ GPS SETTINGS ============ 
 #define GPS_PIN_RX 8
 #define GPS_PIN_TX 7
 #define GPS_PACKET_INTERVAL 10000 // milliseconds
-// LED_BUILTIN is HIGH => GPS is valid
+// NOTE: GPS is valid, if LED_BUILTIN is HIGH
 // =========== LORA SETTINGS =========== 
 #define LORA_PIN_RX 2
 #define LORA_PIN_TX 3
@@ -103,7 +106,7 @@ void loop()
 }
 
 
-// ========== Listen LORA ==========
+// =========================================== Listen LORA =====================================
 void ListenLORA() {
   lora_ss.listen();     //switch to lora software serial
   for (unsigned long start = millis(); millis() - start < GPS_PACKET_INTERVAL;) {
@@ -130,20 +133,18 @@ void ListenLORA() {
         Serial.print("BLE data packet: |");
       }
 
-      writeToBLE(loraDataPacket.id, loraDataPacket.lat, loraDataPacket.lon, loraDataPacket.sat,
-                  loraDataPacket.year, loraDataPacket.month, loraDataPacket.day,
-                  loraDataPacket.hour, loraDataPacket.minute, loraDataPacket.second);
-   
+      getNewData(loraDataPacket);
+      writeStorageToBLE();
+
       if (DEBUG_MODE) Serial.println(" | end of BLE data.");
     }
     else {
       // if the time checker is over some prescribed amount
       // let the user know there is no incoming data
       if ((millis() - lastLoraPacketTime) > 5000) {
-        if (DEBUG_MODE) Serial.println("No LORA date...");
-        else {
-          //TODO: Send pure tracker number to bluetooth
-        };
+        if (DEBUG_MODE) Serial.print("No new LORA date. BLE| ");
+        writeStorageToBLE();
+        if (DEBUG_MODE) Serial.println(" | end BLE package");
         lastLoraPacketTime = millis();
       }
     }
@@ -151,7 +152,7 @@ void ListenLORA() {
 }
 
 
-// ========== READ GPS and SEND TO LORA ==========
+// =======------------------=== READ GPS and SEND TO LORA ==========
 void sendGPStoLORA() {
   bool newData = false;
   unsigned long chars;
@@ -213,7 +214,7 @@ void sendData(float lat, float lon, unsigned short sat,
 }
 
 
-// ============ GPS ===========================================
+// =================================== GPS ===========================================
 void displayGPSInfo() {
   digitalWrite(LED_BUILTIN, HIGH);
 
@@ -281,7 +282,7 @@ void displayGPSInfo() {
 
 
 
-// ============ BLE SECTION ==================================
+// ================================ BLE SECTION ==================================
 void setupBLE(){
   sendCommand("AT");
   sendCommand("AT+NAMEAGLora");
@@ -304,15 +305,10 @@ void sendCommand(const char * command){
 }
 
 
-void writeToBLE(char id[], float lat, float lon, unsigned char sat, 
-                unsigned short year, unsigned char month, unsigned char day, 
-                unsigned char hour, unsigned char minute, unsigned char second) {
-  union cvt {
-    float val;
-    unsigned char b[4];
-  } x;
+void writeHeaderToBLE(){
 
-  // BLE protocol
+  // AGLoRa BLE protocol
+  // HEADER
   Serial.write("AGLoRa");   // signature 6 bytes
   Serial.write(0xAA);       // BLE protocol version, 1 byte
 
@@ -320,23 +316,33 @@ void writeToBLE(char id[], float lat, float lon, unsigned char sat,
   Serial.write(MY_NAME);//NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
+}
+
+
+void writePackageToBLE(DATA package) {
+  union cvt {
+    float val;
+    unsigned char b[4];
+  } x;
+
+  // AGLoRa BLE protocol
   Serial.write(0x1D); //group separator, 1 byte
   Serial.write(0x02); // start of text, 1 byte
-  Serial.write(id);   //NAME_LENGTH bytes
+  Serial.write(package.id);   //NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
   Serial.write(0x1E); //record separator
-  x.val = lat;
+  x.val = package.lat;
   Serial.write(x.b, 4);   //4 bytes
-  x.val = lon;
+  x.val = package.lon;
   Serial.write(x.b, 4);   //4 bytes
-  Serial.write(sat);      // 1 byte
-  Serial.write(year);     //2 bytes
-  Serial.write(month);    //1 byte
-  Serial.write(day);      //1 byte
-  Serial.write(hour);     //1 byte
-  Serial.write(minute);   //1 byte
-  Serial.write(second);   //1 byte
+  Serial.write(package.sat);      // 1 byte
+  Serial.write(package.year);     //2 bytes
+  Serial.write(package.month);    //1 byte
+  Serial.write(package.day);      //1 byte
+  Serial.write(package.hour);     //1 byte
+  Serial.write(package.minute);   //1 byte
+  Serial.write(package.second);   //1 byte
  
   Serial.write(0x04); // end of transmission, 1 byte
 }
@@ -355,3 +361,46 @@ void readFromBLE() {
   }
   if(i != 0 ) Serial.println();
 }
+
+// =============================== DATA STORAGE ========================================
+#define STORAGE_SIZE 5
+DATA storage[STORAGE_SIZE];
+char storageCounter = 0;
+
+// ADD NEW DATA TO STORAGE
+void getNewData(DATA newData) {
+  bool isExist = false;
+  String newId = newData.id;
+
+  for(int i = 0; i < storageCounter; i++){
+    String id = storage[i].id;
+
+    if( id == newId ) {
+      storage[i] = newData;
+      isExist = true;
+      return;
+    }
+  }
+
+  if( !isExist ) {
+    storage[storageCounter] = newData;
+    storageCounter++;
+    if( storageCounter > STORAGE_SIZE ) storageCounter = STORAGE_SIZE;
+  }
+}
+
+
+// Send all data from storage to BLE 
+void writeStorageToBLE(){
+
+  writeHeaderToBLE();               //Header
+  Serial.write(storageCounter);     //Counter
+
+  if( storageCounter > 0 ) {
+    for(int i = 0; i <= storageCounter; i++){
+      writePackageToBLE(storage[i]);  //Next tracker DATA
+    }
+  }
+}
+
+
