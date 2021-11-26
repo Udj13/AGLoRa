@@ -383,9 +383,9 @@ void getNewData(DATA newData) {
   }
 
   if( !isExist ) {
-    storage[storageCounter] = newData;
     storageCounter++;
     if( storageCounter > STORAGE_SIZE ) storageCounter = STORAGE_SIZE;
+    storage[storageCounter] = newData;
   }
 }
 
@@ -397,7 +397,7 @@ void writeStorageToBLE(){
   Serial.write(storageCounter);     //Counter
 
   if( storageCounter > 0 ) {
-    for(int i = 0; i <= storageCounter; i++){
+    for(int i = 0; i < storageCounter; i++){
       writePackageToBLE(storage[i]);  //Next tracker DATA
     }
   }
