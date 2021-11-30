@@ -1,13 +1,10 @@
 /*
 Project AGLoRa (abbreviation of Arduino + GPS + LoRa)
 Tiny and chip LoRa GPS tracker
-
 Copyright 2021 Eugeny Shlyagin (shlyagin@gmail.com)
-
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
 Modules used:
 - Arduino UNO/Nano (ATMEGA328P, not ATmega168)
 - GPS NMEA Module (Generic)
@@ -17,7 +14,7 @@ Modules used:
 
 // ========== GENERAL SETTINGS ========== 
 #define NAME_LENGTH 6                   // the same value for all devices
-char MY_NAME[NAME_LENGTH] = "Rick";  // name of current tracker, NAME_LENGTH characters
+char MY_NAME[NAME_LENGTH] = "Morty";  // name of current tracker, NAME_LENGTH characters
 // ========== SERIAL DEBUGGING ========== 
 #define DEBUG_MODE false
 
@@ -311,7 +308,7 @@ void writeHeaderToBLE(){
   // HEADER
   Serial.write("AGLoRa");   // signature 6 bytes
   Serial.write(0xAA);       // BLE protocol version, 1 byte
-
+  Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x01); // start of heading, 1 byte
   Serial.write(MY_NAME);//NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
@@ -327,16 +324,18 @@ void writePackageToBLE(DATA package) {
 
   // AGLoRa BLE protocol
   Serial.write(0x1D); //group separator, 1 byte
+  Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x02); // start of text, 1 byte
   Serial.write(package.id);   //NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
   Serial.write(0x1E); //record separator
-  x.val = package.lat;
-  Serial.write(x.b, 4);   //4 bytes
+  x.val = package.lat;  
+  Serial.write(x.b, 4);   //latitude, 4 bytes
   x.val = package.lon;
-  Serial.write(x.b, 4);   //4 bytes
-  Serial.write(package.sat);      // 1 byte
+  Serial.write(x.b, 4);   //longitute, 4 bytes
+  Serial.write(package.sat);      // satellites  1 byte
+
   Serial.write(package.year);     //2 bytes
   Serial.write(package.month);    //1 byte
   Serial.write(package.day);      //1 byte
@@ -364,7 +363,7 @@ void readFromBLE() {
 
 // =============================== DATA STORAGE ========================================
 #define STORAGE_SIZE 5
-DATA storage[STORAGE_SIZE];
+DATA storage[STORAGE_SIZE+1];
 char storageCounter = 0;
 
 // ADD NEW DATA TO STORAGE
@@ -372,7 +371,7 @@ void getNewData(DATA newData) {
   bool isExist = false;
   String newId = newData.id;
 
-  for(int i = 0; i < storageCounter; i++){
+  for(int i = 1; i <= storageCounter; i++){
     String id = storage[i].id;
 
     if( id == newId ) {
@@ -397,10 +396,8 @@ void writeStorageToBLE(){
   Serial.write(storageCounter);     //Counter
 
   if( storageCounter > 0 ) {
-    for(int i = 0; i < storageCounter; i++){
+    for(int i = 1; i <= storageCounter; i++){
       writePackageToBLE(storage[i]);  //Next tracker DATA
     }
   }
 }
-
-
