@@ -310,26 +310,27 @@ void writeHeaderToBLE(){
   Serial.write(0xAA);       // BLE protocol version, 1 byte
   Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x01); // start of heading, 1 byte
-  Serial.write(MY_NAME);//NAME_LENGTH bytes
+  Serial.write(MY_NAME, sizeof(MY_NAME));//NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
 }
 
 
 void writePackageToBLE(DATA package) {
+
   union cvt {
     float val;
     unsigned char b[4];
   } x;
 
   // AGLoRa BLE protocol
-  Serial.write(0x1D); //group separator, 1 byte
+  Serial.write(0x1D); //group separator, dec 29,  1 byte
   Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x02); // start of text, 1 byte
-  Serial.write(package.id);   //NAME_LENGTH bytes
+  Serial.write(package.id, sizeof(package.id));   //NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
-  Serial.write(0x1E); //record separator
+  Serial.write(0x1E); //record separator, dec 30
   x.val = package.lat;  
   Serial.write(x.b, 4);   //latitude, 4 bytes
   x.val = package.lon;
