@@ -49,7 +49,7 @@ struct DATA {
   float lon;
   unsigned char sat;
 
-  unsigned short year;
+  unsigned char year; // the Year minus 1900
   unsigned char month;
   unsigned char day;
 
@@ -114,7 +114,7 @@ void ListenLORA() {
 
       // DEBUG_MODE
       if (DEBUG_MODE){      // dump out what was just received
-        Serial.print("ID: "); Serial.print(loraDataPacket.id);
+        Serial.print("NEW LORA DATA RECIVED. ID: "); Serial.print(loraDataPacket.id);
         Serial.print(" LAT: "); Serial.print(loraDataPacket.lat, 6);
         Serial.print(" LON: "); Serial.print(loraDataPacket.lon, 6);
         Serial.print(" SAT: "); Serial.print(loraDataPacket.sat);
@@ -184,7 +184,7 @@ void sendGPStoLORA() {
 
 // ========== SEND LORA DATA ==========  
 void sendData(float lat, float lon, unsigned short sat, 
-              unsigned short year, unsigned char month, unsigned char day, 
+              unsigned char year, unsigned char month, unsigned char day, 
               unsigned char hour, unsigned char minute, unsigned char second){
   
   // data set
@@ -215,6 +215,7 @@ void sendData(float lat, float lon, unsigned short sat,
 void displayGPSInfo() {
   digitalWrite(LED_BUILTIN, HIGH);
 
+  Serial.print("MY GPS POSITION HAVE BEEN UPDATED: ");
   Serial.print("Satellites in view: ");
   Serial.println(gps.satellites.value()); 
   
@@ -364,7 +365,7 @@ void readFromBLE() {
 
 // =============================== DATA STORAGE ========================================
 #define STORAGE_SIZE 5
-DATA storage[STORAGE_SIZE+1];
+DATA storage[STORAGE_SIZE];
 char storageCounter = 0;
 
 // ADD NEW DATA TO STORAGE
@@ -372,13 +373,13 @@ void getNewData(DATA newData) {
   bool isExist = false;
   String newId = newData.id;
 
-  for(int i = 1; i <= storageCounter; i++){
+  for(int i = 0; i < storageCounter; i++){
     String id = storage[i].id;
 
     if( id == newId ) {
       storage[i] = newData;
       isExist = true;
-      return;
+      
     }
   }
 
@@ -397,7 +398,7 @@ void writeStorageToBLE(){
   Serial.write(storageCounter);     //Counter
 
   if( storageCounter > 0 ) {
-    for(int i = 1; i <= storageCounter; i++){
+    for(int i = 1; i < storageCounter; i++){
       writePackageToBLE(storage[i]);  //Next tracker DATA
     }
   }
