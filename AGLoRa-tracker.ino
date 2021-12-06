@@ -283,10 +283,10 @@ void displayGPSInfo() {
 // ================================ BLE SECTION ==================================
 void setupBLE(){
   sendCommand("AT");
-  sendCommand("AT+NAMEAGLora");
+  sendCommand("AT+NAMEAGLoRa");
   sendCommand("AT+ROLE0");
 //  sendCommand("AT+UUID0xFFE0"); - not working
-//  sendCommand("AT+CHAR0xFFE1");
+//  sendCommand("AT+CHAR0xFFE1"); - not working
 }
 
 
@@ -373,7 +373,7 @@ void getNewData(DATA newData) {
   bool isExist = false;
   String newId = newData.id;
 
-  for(int i = 0; i < storageCounter; i++){
+  for(int i = 1; i <= storageCounter; i++){
     String id = storage[i].id;
 
     if( id == newId ) {
@@ -397,8 +397,8 @@ void writeStorageToBLE(){
   writeHeaderToBLE();               //Header
   Serial.write(storageCounter);     //Counter
 
-  if( storageCounter > 0 ) {
-    for(int i = 1; i < storageCounter; i++){
+  if( storageCounter != 0 ) {
+    for(int i = 1; i <= storageCounter; i++){
       writePackageToBLE(storage[i]);  //Next tracker DATA
     }
   }
