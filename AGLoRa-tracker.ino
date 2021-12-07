@@ -14,16 +14,17 @@ Modules used:
 
 // ========== GENERAL SETTINGS ========== 
 #define NAME_LENGTH 6                   // the same value for all devices
-char MY_NAME[NAME_LENGTH] = "Morty";  // name of current tracker, NAME_LENGTH characters
+char MY_NAME[NAME_LENGTH] = "Summer";  // name of current tracker, NAME_LENGTH characters
 // ========== SERIAL DEBUGGING ========== 
 #define DEBUG_MODE false
 
 
 // ============ OTHER SETTINGS ========== 
+#define BLE_PACKET_INTERVAL 10000
 // ============ GPS SETTINGS ============ 
 #define GPS_PIN_RX 8
 #define GPS_PIN_TX 7
-#define GPS_PACKET_INTERVAL 10000 // milliseconds
+#define GPS_PACKET_INTERVAL 20000 // milliseconds
 // NOTE: GPS is valid, if LED_BUILTIN is HIGH
 // =========== LORA SETTINGS =========== 
 #define LORA_PIN_RX 2
@@ -138,7 +139,7 @@ void ListenLORA() {
     else {
       // if the time checker is over some prescribed amount
       // let the user know there is no incoming data
-      if ((millis() - lastLoraPacketTime) > 5000) {
+      if ((millis() - lastLoraPacketTime) > BLE_PACKET_INTERVAL) {
         if (DEBUG_MODE) Serial.print("No new LORA date. BLE| ");
         writeStorageToBLE();
         if (DEBUG_MODE) Serial.println(" | end BLE package");
@@ -311,7 +312,7 @@ void writeHeaderToBLE(){
   Serial.write(0xAA);       // BLE protocol version, 1 byte
   Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x01); // start of heading, 1 byte
-  Serial.write(MY_NAME, sizeof(MY_NAME));//NAME_LENGTH bytes
+  Serial.write(MY_NAME);//NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
 }
@@ -328,7 +329,7 @@ void writePackageToBLE(DATA package) {
   Serial.write(0x1D); //group separator, dec 29,  1 byte
   Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
   Serial.write(0x02); // start of text, 1 byte
-  Serial.write(package.id, sizeof(package.id));   //NAME_LENGTH bytes
+  Serial.write(package.id, sizeof(package.id)); //NAME_LENGTH bytes
   Serial.write(0x03); // end of text, 1 byte
 
   Serial.write(0x1E); //record separator, dec 30
@@ -338,7 +339,7 @@ void writePackageToBLE(DATA package) {
   Serial.write(x.b, 4);   //longitute, 4 bytes
   Serial.write(package.sat);      // satellites  1 byte
 
-  Serial.write(package.year);     //2 bytes
+  Serial.write(package.year);     //1 byte
   Serial.write(package.month);    //1 byte
   Serial.write(package.day);      //1 byte
   Serial.write(package.hour);     //1 byte
