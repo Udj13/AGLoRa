@@ -325,28 +325,53 @@ void writePackageToBLE(DATA package) {
     unsigned char b[4];
   } x;
 
-  // AGLoRa BLE protocol
-  Serial.write(0x1D); //group separator, dec 29,  1 byte
-  Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
-  Serial.write(0x02); // start of text, 1 byte
-  Serial.write(package.id, sizeof(package.id)); //NAME_LENGTH bytes
-  Serial.write(0x03); // end of text, 1 byte
+  if( !DEBUG_MODE ){
+    // AGLoRa BLE protocol
+    Serial.write(0x1D); //group separator, dec 29,  1 byte
+    Serial.write(NAME_LENGTH);   //NAME_LENGTH, 1 byte
+    Serial.write(0x02); // start of text, 1 byte
+    Serial.write(package.id, sizeof(package.id)); //NAME_LENGTH bytes
+    Serial.write(0x03); // end of text, 1 byte
 
-  Serial.write(0x1E); //record separator, dec 30
-  x.val = package.lat;  
-  Serial.write(x.b, 4);   //latitude, 4 bytes
-  x.val = package.lon;
-  Serial.write(x.b, 4);   //longitute, 4 bytes
-  Serial.write(package.sat);      // satellites  1 byte
+    Serial.write(0x1E); //record separator, dec 30
+    x.val = package.lat;  
+    Serial.write(x.b, 4);   //latitude, 4 bytes
+    x.val = package.lon;
+    Serial.write(x.b, 4);   //longitute, 4 bytes
+    Serial.write(package.sat);      // satellites  1 byte
 
-  Serial.write(package.year);     //1 byte
-  Serial.write(package.month);    //1 byte
-  Serial.write(package.day);      //1 byte
-  Serial.write(package.hour);     //1 byte
-  Serial.write(package.minute);   //1 byte
-  Serial.write(package.second);   //1 byte
- 
-  Serial.write(0x04); // end of transmission, 1 byte
+    Serial.write(package.year);     //1 byte
+    Serial.write(package.month);    //1 byte
+    Serial.write(package.day);      //1 byte
+    Serial.write(package.hour);     //1 byte
+    Serial.write(package.minute);   //1 byte
+    Serial.write(package.second);   //1 byte
+  
+    Serial.write(0x04); // end of transmission, 1 byte
+
+  } else {
+      // AGLoRa BLE protocol
+    Serial.println(0x1D); //group separator, dec 29,  1 byte
+    Serial.println(NAME_LENGTH);   //NAME_LENGTH, 1 byte
+    Serial.println(0x02); // start of text, 1 byte
+    Serial.println(package.id); //NAME_LENGTH bytes
+    Serial.println(0x03); // end of text, 1 byte
+
+    Serial.println(0x1E); //record separator, dec 30
+    Serial.println(package.lat);   //latitude, 4 bytes
+    Serial.println(package.lon);   //longitute, 4 bytes
+    Serial.println(package.sat);      // satellites  1 byte
+
+    Serial.println(package.year);     //1 byte
+    Serial.println(package.month);    //1 byte
+    Serial.println(package.day);      //1 byte
+    Serial.println(package.hour);     //1 byte
+    Serial.println(package.minute);   //1 byte
+    Serial.println(package.second);   //1 byte
+  
+    Serial.println(0x04); // end of transmission, 1 byte
+  }
+  readFromBLE();  
 }
 
 void readFromBLE() {
@@ -355,13 +380,16 @@ void readFromBLE() {
   byte sreply;
 
   while (Serial.available()) {
-//    reply[i] = mySerial.read();
+//    reply[i] = Serial.read();
 //    Serial.print(reply[i], HEX);
     i += 1;
     sreply = Serial.read();
-    Serial.print(sreply, HEX);
+    if( DEBUG_MODE ) {
+      Serial.println("BLE REPLY:");
+      Serial.print(sreply, HEX);
+    }
   }
-  if(i != 0 ) Serial.println();
+  if((i != 0)&&(DEBUG_MODE) ) Serial.println();
 }
 
 // =============================== DATA STORAGE ========================================
@@ -397,10 +425,11 @@ void writeStorageToBLE(){
 
   writeHeaderToBLE();               //Header
   Serial.write(storageCounter);     //Counter
-
+  delay(200);
   if( storageCounter != 0 ) {
     for(int i = 1; i <= storageCounter; i++){
       writePackageToBLE(storage[i]);  //Next tracker DATA
+      delay(200);
     }
   }
 }
