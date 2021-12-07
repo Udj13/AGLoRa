@@ -1,5 +1,6 @@
 # AGLoRa
-Project AGLoRa - easy opensource LoRa GPS tracker
+Project AGLoRa - easy opensource LoRa GPS tracker.
+Created by Eugeny Shlyagin (shlyagin@gmail.com)
 
 ![AGLoRa](https://bitlite.ru/wp-content/uploads/2021/11/aglora-prototype.jpg)
  
