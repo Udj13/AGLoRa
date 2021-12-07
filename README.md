@@ -115,3 +115,8 @@ char MY_NAME[NAME_LENGTH] = "Morty";
 - Select your Bluetooth module from the List (“AGLoRa”)
 - Waiting receive data from other trackers
 
+
+
+Description in Russian: https://bitlite.ru/aglora-lora-gps-tracker/
+
+
