@@ -104,7 +104,7 @@ char MY_NAME[NAME_LENGTH] = "Morty";
 
 - Source code is available for free on github: https://github.com/Udj13/AGLoRa-client-flutter
 - You can download the iOs app from here (in progress)
-- You can download the Android app from here (in progress)
+- You can download the Android app from here: https://shlyagin.ru/aglora.apk
 
 ## How to use the AGLoRa Client App?
 
