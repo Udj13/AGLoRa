@@ -13,19 +13,19 @@ AGLoRa is an acronym for "Arduino GPS LoRa".
 LoRa (from "long range") is a proprietary low-power wide-area network modulation technique. https://en.wikipedia.org/wiki/LoRa
 
 AGLoRa is a simple open-source satellite tracking system for hiking, sailing, pet finding, and other outdoor activities.
-All components widely available on marketplaces (aliexpress etc.).
+All components are widely available to buy online (aliexpress etc.).
 
 ![Program block diagram](https://bitlite.ru/wp-content/uploads/2021/11/lora-tracker.drawio.png)
 
 
-AGLoRa receives the coordinates from other trackers (via LoRa) and immediately transmits them to the phone app.
+AGLoRa receives the GPS coordinates from other trackers (via LoRa) and immediately transmits them to the phone app.
 By default the tracker sends its coordinates via LoRa every 10 seconds, when its GPS data is valid.
 
 ## ABOUT THE PROJECT
 
 We are going to test E32-E433T30D. 
-It is a wireless transceiver module, operates at 433 MHz based on original RFIC SX1278 from SEMTECH.
-Aglora broadcast coordinates to other trackers.
+It is a wireless transceiver module, operating at 433 MHz based on original RFIC SX1278 from SEMTECH.
+Aglora broadcasts coordinates to other trackers.
 
 ![AGLoRa working diagram](https://bitlite.ru/wp-content/uploads/2021/11/Project-proposal-1.jpg)
  
@@ -86,7 +86,7 @@ Add a 5V stabilizer for battery power (like LM7805).
 
 Three steps:
 
-1. Download or copy a Sketch from here: https://github.com/Udj13/AGLoRa/blob/main/AGLoRa-tracker.ino Just one file! Easy!
+1. Download or copy the Sketch from here: https://github.com/Udj13/AGLoRa/blob/main/AGLoRa-tracker.ino Just one file! Easy!
 
 2. Change the “MY_NAME” setting. Сheck the debug mode is off.
 
@@ -116,10 +116,10 @@ char MY_NAME[NAME_LENGTH] = "Morty";
 ![AGLoRa client](https://bitlite.ru/wp-content/uploads/2021/11/aglora-test-3km.jpg)
 
 - Install application on your device
-- Turn on the AGLoRa trackers. When GPS data is correct, the built-in LED is on.
-- Scan for available device
+- Turn on the AGLoRa trackers. When the GPS data is correct, the built-in LED will turn on.
+- Scan for available devices
 - Select your Bluetooth module from the List (“AGLoRa”)
-- Waiting receive data from other trackers
+- Wait to receive data from other trackers
 
 
 
