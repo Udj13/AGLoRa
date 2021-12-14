@@ -1,6 +1,11 @@
 # AGLoRa
+
 Project AGLoRa - easy opensource LoRa GPS tracker.
 Created by Eugeny Shlyagin (shlyagin@gmail.com)
+
+[![AGLoRa video](http://img.youtube.com/vi/bU68tQFBxwA/0.jpg)](http://www.youtube.com/watch?v=bU68tQFBxwA)
+
+Click to open video.
 
 ![AGLoRa](https://bitlite.ru/wp-content/uploads/2021/11/aglora-prototype.jpg)
  
@@ -17,7 +22,7 @@ AGLoRa receives the coordinates from other trackers (via LoRa) and immediately t
 By default the tracker sends its coordinates via LoRa every 10 seconds, when its GPS data is valid.
 
 ## ABOUT THE PROJECT
- 
+
 We are going to test E32-E433T30D. 
 It is a wireless transceiver module, operates at 433 MHz based on original RFIC SX1278 from SEMTECH.
 Aglora broadcast coordinates to other trackers.
