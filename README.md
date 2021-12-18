@@ -107,9 +107,16 @@ char MY_NAME[NAME_LENGTH] = "Morty";
  
 # Install the app on your phone.
 
+![AGLoRa client icon](https://bitlite.ru/wp-content/uploads/2021/12/80.png)
+
 - Source code is available for free on github: https://github.com/Udj13/AGLoRa-client-flutter
-- You can download the iOs app from here (in progress)
+- You can download the iOs app from Apple App Store: https://apps.apple.com/ru/app/aglora/id1600250635
 - You can download the Android app from here: https://shlyagin.ru/aglora.apk
+
+Permissons:
+- Bluetooth permission required to connect to your AGLoRa device
+- Location permission is required to calculate distance between AGLoRa devices. Without this permission the app will only show the coordinates.
+
 
 ## How to use the AGLoRa Client App?
 
