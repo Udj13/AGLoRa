@@ -34,7 +34,7 @@ Aglora broadcasts coordinates to other trackers.
 - Arduino Nano or Arduino UNO (ATMEGA328P, not ATmega168)
 - LoRa Module (EBYTE E220-900T22D (868 MHz), E433T30D (433 MHz))
 - GPS Module (Generic)
-- HC-05 (AT-09) Bluetooth Low Energy Module
+- AT-09 (HM-10) Bluetooth Low Energy Module
 - iOS or Android device
  
 ### APPS
