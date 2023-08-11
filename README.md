@@ -95,7 +95,9 @@ char MY_NAME[NAME_LENGTH] = "Morty";
 #define DEBUG_MODE false
 ```
 
-3. Upload a Sketch to an Arduino.
+3.  Install "EByte LoRa E220 by Renzo Mischianty" library and "TinyGPSPlus by Mikal Hart" library from Arduino IDE library manager ("Tools" -> "Manage Libraries")
+
+Ready! Upload a Sketch to an Arduino.
 
 **NOTES:**
 
@@ -113,9 +115,12 @@ char MY_NAME[NAME_LENGTH] = "Morty";
 - You can download the iOs app from Apple App Store: https://apps.apple.com/ru/app/aglora/id1600250635
 - You can download the Android app APK from here: https://github.com/Udj13/AGLoRa-client-flutter/releases/tag/AGLoRa (or https://shlyagin.ru/aglora.apk)
 
-Permissons:
+Permissions:
 - Bluetooth permission required to connect to your AGLoRa device
 - Location permission is required to calculate distance between AGLoRa devices. Without this permission the app will only show the coordinates.
+
+  ![image](https://github.com/Udj13/AGLoRa/assets/54446451/db3090a5-7945-4770-8903-61eff84b1b90)
+
 
 
 ## How to use the AGLoRa Client App?
@@ -127,6 +132,75 @@ Permissons:
 - Scan for available devices
 - Select your Bluetooth module from the List (“AGLoRa”)
 - Wait to receive data from other trackers
+
+# Hardware tests
+
+If the modules do not work, then you can run test sketch from "hardware-tests" folder.
+
+# Script customization
+
+Just follow the ~~white rabbit~~ the instructions in the code.
+
+GPS_PACKET_INTERVAL - how often the tracker will be send data
+
+USE_EEPROM_MEMORY - set "false" to use SRAM memory, "true" to use EEPROM
+
+SRAM_STORAGE_SIZE - if you are using SRAM you can set the size of memory. In this case check the free memory in Arduino IDE.
+
+![image](https://github.com/Udj13/AGLoRa/assets/54446451/092a52a8-19a8-4996-be58-3ef0c38b8e5d)
+
+# Custom sensors
+
+If you need you can add any sensors and then see its values in the application. To do this, just edit the section with the main data structure and the section with the protocol.
+Note that all software versions must be the same for all trackers.
+Example:
+
+```
+struct DATA {
+  char id[NAME_LENGTH];  // name
+
+  float lat;  // coordinates
+  float lon;
+  unsigned char sat;
+
+  unsigned char year;  // the Year minus 2000
+  unsigned char month;
+  unsigned char day;
+
+  unsigned char hour;
+  unsigned char minute;
+  unsigned char second;
+
+  // Add more data fields here if you need
+  // ...
+  // unsigned char speed;
+  // unsigned char battery;
+  // unsigned char sensor1;
+  // ...
+};
+
+```
+
+```
+void sendPackageToBluetooth(DATA *package){
+....
+// Sensors and additional data
+Serial.print(F("&sat="));    //record separator
+Serial.print(package->sat);  // satellites  1 byte
+
+// Add more data here if you need ...
+// Serial.print("&speed=");       // data's name in app
+// Serial.print(package->speed);   // value
+
+// Serial.print("&batt=");
+// Serial.print(package->battery);
+
+// Serial.print("&alienSensor=");
+// Serial.print(package->sensor1);
+
+
+```
+
 
 
 
