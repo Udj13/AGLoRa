@@ -113,7 +113,7 @@ Ready! Upload a Sketch to an Arduino.
 
 - Source code is available for free on github: https://github.com/Udj13/AGLoRa-client-flutter
 - You can download the iOs app from Apple App Store: https://apps.apple.com/ru/app/aglora/id1600250635
-- You can download the Android app APK from here: [https://github.com/Udj13/AGLoRa-client-flutter/releases/tag/AGLoRa (or https://shlyagin.ru/aglora.apk)](https://github.com/Udj13/AGLoRa-client-flutter/releases/tag/AGLoRa2.0)
+- You can download the Android app APK from here: https://github.com/Udj13/AGLoRa-client-flutter/releases/tag/AGLoRa2.0
 
 Permissions:
 - Bluetooth permission required to connect to your AGLoRa device
