@@ -102,10 +102,6 @@ This is a function that sends data to the app.
 Data packets are sent using OsmAnd-like protocol:
 id=name&lat={0}&lon={1}&timestamp={2}&speed={3}&altitude={4}
 */
-#include <stdio.h>
-static int serial_fputchar(const char ch, FILE *stream) { Serial.write(ch); return ch; }
-static FILE *serial_stream = fdevopen(serial_fputchar, NULL);
-
 void sendPackageToBluetooth(DATA *package) {
 
   Serial.print(F("&name="));  //other tracker's name
@@ -118,17 +114,22 @@ void sendPackageToBluetooth(DATA *package) {
 
   //Date and time format: 2023-06-07T15:21:00Z
   Serial.print(F("&timestamp="));      // record separator
-  printf("%04d", package->year + 2000);  // year
+  Serial.print(package->year + 2000);  // year
   Serial.print(F("-"));                // data separator
-  printf("%02d", package->month);        // month
+  if (package->month < 10) Serial.print(F("0"));
+  Serial.print(package->month);        // month
   Serial.print(F("-"));                // data separator
-  printf("%02d", package->day);          // day
+  if (package->day < 10) Serial.print(F("0"));
+  Serial.print(package->day);          // day
   Serial.print(F("T"));                // record separator
-  printf("%02d", package->hour);         // hour
+  if (package->hour < 10) Serial.print(F("0"));
+  Serial.print(package->hour);         // hour
   Serial.print(F(":"));                // time separator
-  printf("%02d", package->minute);       // minute
+  if (package->minute < 10) Serial.print(F("0"));
+  Serial.print(package->minute);       // minute
   Serial.print(F(":"));                // time separator
-  printf("%02d", package->second);       // second
+  if (package->second < 10) Serial.print(F("0"));
+  Serial.print(package->second);       // second
   Serial.print(F("Z"));                // UTC
 
   // Sensors and additional data
