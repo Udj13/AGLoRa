@@ -201,7 +201,10 @@ Serial.print(package->sat);  // satellites  1 byte
 
 ```
 
+# Links
 
+Full project (C++, PlatformIO): https://github.com/Udj13/AGLoRa-full/
+Mobile client (Dart, Flutter): https://github.com/Udj13/AGLoRa-client-flutter
 
 
 Description in Russian: https://bitlite.ru/aglora-lora-gps-tracker/
