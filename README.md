@@ -46,6 +46,8 @@ Let’s Start Building. The circuit is so simple, there are a few connections to
 
 ![AGLoRa device diagram](https://bitlite.ru/wp-content/uploads/2021/11/Project-proposal.jpg)
 
+Also you can read [step-by-step instructions](https://github.com/Udj13/AGLoRa/wiki/Step%E2%80%90by%E2%80%90step-instructions) in AGLoRa Wiki
+
 
 ### Сonnecting the LoRa module
 ```
@@ -202,6 +204,8 @@ Serial.print(package->sat);  // satellites  1 byte
 ```
 
 # Links
+
+AGLoRa Wiki: https://github.com/Udj13/AGLoRa/wiki
 
 Full project (C++, PlatformIO): https://github.com/Udj13/AGLoRa-full/
 
