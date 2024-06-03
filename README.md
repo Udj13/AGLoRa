@@ -52,8 +52,8 @@ Also you can read [step-by-step instructions](https://github.com/Udj13/AGLoRa/wi
 ### Сonnecting the LoRa module
 ```
 Arduino Pins	 	  LoRa Pins
-Pin 2		——>		RX
-Pin 3		——>		TX
+Pin 2		——>		TX
+Pin 3		——>		RX
 Pin 4		——>		M0   
 Pin 5		——>		M1  
 Pin 6		——>		AX    
