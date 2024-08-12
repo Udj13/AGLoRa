@@ -42,6 +42,10 @@ NOTE: GPS is valid, if LED_BUILTIN is HIGH
 // Docs: http://arduiniana.org/libraries/tinygpsplus/
 #include "LoRa_E220.h"        // install from Arduino IDE
 // Docs: https://github.com/xreef/EByte_LoRa_E220_Series_Library
+// MPU 6050 library
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
 
 // ...or, if you use PlatformIO, add to "platformio.ini":
 //  lib_deps = 
@@ -95,7 +99,7 @@ const char NAME[NAME_LENGTH] = "Rick";               // Name of current tracker,
 #define DEBUG_LORA true  // print GPS logs
 #define DEBUG_MEMORY true  // print GPS logs
 #define DEBUG_AGLORA true  // print GPS logs
-
+#define DEBUG_MPU6050 true
 
 
 
@@ -126,13 +130,19 @@ struct DATA {
   unsigned char sat;
   unsigned char hdop;
 
-  // Add more data fields here if you need
-  // ...
-  unsigned char battery;
-  // unsigned char speed;
-  // unsigned char sensor1;
-  // unsigned char sensor2;
-  // ...
+
+  // Last reading's accelerometer X,y and z axis m/s^2
+  float accelerationX, accelerationY, accelerationZ;
+  //Last reading's gyro X,y and z axis in rad/s
+  float gyroX, gyroY, gyroZ;
+  // Last reading's temperature (C)
+  float mpuTemperature;
+
+    // Add more data fields here if you need
+    // ...
+    //  unsigned char battery;
+    // unsigned char speed;
+
 };
 
 /*
@@ -178,19 +188,28 @@ String sendToPhone(DATA *package) {
 
   result += F("&hdop="); 
   result += package->hdop;  // HDOP  1 byte
+                            // Add acceleration data
+  result += F("&accX=");
+  result += String(package->accelerationX, 6);
+  result += F("&accY=");
+  result += String(package->accelerationY, 6);
+  result += F("&accZ=");
+  result += String(package->accelerationZ, 6);
 
-  // Add more data here if you need ...
-  // result += "&speed=";       // data's name in app
-  // result += package->speed;   // value
+  // Add gyroscope data
+  result += F("&gyroX=");
+  result += String(package->gyroX, 6);
+  result += F("&gyroY=");
+  result += String(package->gyroY, 6);
+  result += F("&gyroZ=");
+  result += String(package->gyroZ, 6);
+  // MPU temperature
+  result += F("&mpuTemperature=");
+  result += String(package->mpuTemperature, 2);
 
-  result += "&batt=";
-  result += package->battery;
-
-  // result += "&alienSensor=";
-  // result += package->sensor1;
-
-  // result += "&C-137-level=";
-  // result += package->sensor2;
+    // Add more data here if you need ...
+    // result += "&speed=";       // data's name in app
+    // result += package->speed;   // value
 
   return result;
 }
@@ -484,14 +503,76 @@ private:
 
 
 
-void AGLORA::updateSensors(DATA *loraDataPacket)
-{
-    loraDataPacket->battery = 100; // just for example
+
+void AGLORA::setupSensors() {
+
+  // verify connection
+
+#if DEBUG_MODE && DEBUG_MPU6050
+    Serial.println("Testing MPU device connections...");
+#endif
+
+  bool isFound = mpu6050.begin();
+
+  if (!isFound) {
+#if DEBUG_MODE && DEBUG_MPU6050
+      Serial.println("Failed to find MPU6050 chip");
+#endif
+  } else {
+
+#if DEBUG_MODE && DEBUG_MPU6050
+    Serial.println(F("MPU6050 connection successful!"));
+#endif
+
+    mpu6050.setAccelerometerRange(MPU6050_RANGE_8_G);
+#if DEBUG_MODE && DEBUG_MPU6050
+      Serial.print("Accelerometer range set to: +-8G");
+#endif
+
+
+      mpu6050.setGyroRange(MPU6050_RANGE_500_DEG);
+#if DEBUG_MODE && DEBUG_MPU6050
+      Serial.print("Gyro range set to: +- 500 deg/s");
+#endif
+
+
+      mpu6050.setFilterBandwidth(MPU6050_BAND_21_HZ);
+#if DEBUG_MODE && DEBUG_MPU6050
+      Serial.print("Filter bandwidth set to:21 Hz ");
+#endif
+
+  }
+}
+void AGLORA::updateSensors(DATA *loraDataPacket) {
+  sensors_event_t a, g, temp;
+  mpu6050.getEvent(&a, &g, &temp);
+
+  // Assign sensor data to the loraDataPacket
+  loraDataPacket->accelerationX = a.acceleration.x;
+  loraDataPacket->accelerationY = a.acceleration.y;
+  loraDataPacket->accelerationZ = a.acceleration.z;
+
+  loraDataPacket->gyroX = g.gyro.x;
+  loraDataPacket->gyroY = g.gyro.y;
+  loraDataPacket->gyroZ = g.gyro.z;
+  loraDataPacket->mpuTemperature = temp.temperature;
 
 #if DEBUG_MODE && DEBUG_AGLORA
-    Serial.print(F("🟢[AGLoRa sensors: "));
-    Serial.print(F("🔋 - "));
-    Serial.print(loraDataPacket->battery);
+  Serial.print(F("🟢[AGLoRa sensors: "));
+#if DEBUG_MPU6050
+    Serial.print(F("AccX: "));
+  Serial.print(loraDataPacket->accelerationX);
+  Serial.print(F(", AccY: "));
+  Serial.print(loraDataPacket->accelerationY);
+  Serial.print(F(", AccZ: "));
+  Serial.print(loraDataPacket->accelerationZ);
+  Serial.print(F(", GyroX: "));
+  Serial.print(loraDataPacket->gyroX);
+  Serial.print(F(", GyroY: "));
+  Serial.print(loraDataPacket->gyroY);
+  Serial.print(F(", GyroZ: "));
+  Serial.print(loraDataPacket->gyroZ);
+#endif
     Serial.println(F("]"));
 #endif
 }
@@ -1849,6 +1930,7 @@ void setup()
   aglora.hello(); // Beautifully print Hello from AGloRa :-)
   // Start modules
   gps.setup();    // GPS
+  aglora.setupSensors(); // Setup sensors
   lora.setup();   // LoRa
   memory.setup(); // SRAM or EEPROM
   ble.setup();    // Bluetooth Low Energy
