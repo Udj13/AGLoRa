@@ -107,7 +107,7 @@ Ready! Upload a Sketch to an Arduino.
 
 **Remove Bluetooth module Tx-Rx connection before uploading the program!**
 
-**I strongly recommend using the PlatformIO and the full project (https://github.com/Udj13/AGLoRa-ful)! This way you will have the latest version of the code!**
+**I strongly recommend using the PlatformIO and the full project (https://github.com/Udj13/AGLoRa-full)! This way you will have the latest version of the code!**
 
  
 # Install the app on your phone.
