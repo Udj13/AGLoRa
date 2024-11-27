@@ -216,3 +216,10 @@ Mobile client (Dart, Flutter): https://github.com/Udj13/AGLoRa-client-flutter
 Description in Russian: https://bitlite.ru/aglora-lora-gps-tracker/
 
 
+
+# Contributions of other authors
+
+BLE to COM convertor for tests - https://github.com/magdel/ble2com
+
+Aglora Emulator - https://github.com/magdel/agloraemulator
+
