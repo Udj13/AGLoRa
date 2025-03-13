@@ -2,15 +2,14 @@
 Project AGLoRa (abbreviation of Arduino + GPS + LoRa)
 Tiny and chip LoRa GPS tracker
 
+https://github.com/Udj13/AGLoRa/
+
 Copyright © 2021-2024 Eugeny Shlyagin. Contacts: <shlyagin@gmail.com>
 License: http://opensource.org/licenses/MIT
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 Modules used:
 - Arduino UNO/Nano (ATMEGA328P, not ATmega168)
 - GPS NMEA Module (Generic)
@@ -18,16 +17,16 @@ Modules used:
 - Bluetooth BLE AT-09 or HC-05
 */
 
-/* 
-HOW THIS SKETCH WORKS :
+/*
+HOW THIS SKETCH WORKS:
 
-Most of the time the tracker works in listening mode. 
+Most of the time the tracker works in listening mode.
 
-After receiving the LoRa package from another tracker - 
+After receiving the LoRa package from another tracker -
 this data is transferred to the bluetooth serial port.
 
-Once every three minutes, the tracker switches to 
-the GPS receiver for a few seconds to get coordinates. 
+Once every three minutes, the tracker switches to
+the GPS receiver for a few seconds to get coordinates.
 Then sends a LoRa data packet.
 
 NOTE: GPS is valid, if LED_BUILTIN is HIGH
@@ -38,23 +37,35 @@ NOTE: GPS is valid, if LED_BUILTIN is HIGH
 // ==== Settings LEVEL 1 (required) =======
 // ========================================
 
-#include <TinyGPSPlus.h>      // install from Arduino IDE
-// Docs: http://arduiniana.org/libraries/tinygpsplus/
-#include "LoRa_E220.h"        // install from Arduino IDE
+#include <SoftwareSerial.h>
+#include <EEPROM.h>
+
+// First of all, select EBYTE module:
+#define EBYTE_E220 // EBYTE_E220 or EBYTE_E32
+//#define EBYTE_E32 // EBYTE_E220 or EBYTE_E32
+
+// Here are the libraries that I used in this project, thanks to their author Renzo Mischianti!
+// Please, give him a donation if you also think he did a great job!
+// https://github.com/xreef
+// https://mischianti.org/
+
+#ifdef EBYTE_E32
+#include "LoRa_E32.h"
+// Docs: https://github.com/xreef/LoRa_E32_Series_Library
+#endif
+//or
+#ifdef EBYTE_E220
+#include "LoRa_E220.h"
 // Docs: https://github.com/xreef/EByte_LoRa_E220_Series_Library
+#endif
 
-// ...or, if you use PlatformIO, add to "platformio.ini":
-//  lib_deps = 
-//  	mikalhart/TinyGPSPlus@^1.0.3
-//  	xreef/EByte LoRa E220 library@^1.0.8
-
-// The first thing you need is to set up a tracker name and modules connections:
+// After selecting a module, you need to set up a tracker name and module connections:
 
 // ========== NAME =======================
 #define NAME_LENGTH 12             // The same value for all devices
-const char NAME[NAME_LENGTH] = "Rick";               // Name of current tracker, NAME_LENGTH characters
+const char NAME[NAME_LENGTH] = "Morty";               // Name of current tracker, NAME_LENGTH characters
 // Example:
-// #define NAME = "Morty"; // All names length should be no longer than NAME_LENGTH
+// #define NAME = "Rick"; // All names length should be no longer than NAME_LENGTH
 // ========== WIRING =====================
 //UART LORA
 #define LORA_PIN_RX 2
@@ -74,10 +85,10 @@ const char NAME[NAME_LENGTH] = "Rick";               // Name of current tracker,
 #define MEMORY_LED LED_BUILTIN
 // ========== MODULES SETTING=============
 #define GPS_SPEED 9600
-#define LORA_SPEED 9600
+#define LORA_START_SPEED 9600
 
 // Then install "EByte LoRa E220 by Renzo Mischianty" library
-// and "TinyGPSPlus by Mikal Hart" library
+// or "EByte LoRa E32 by Renzo Mischianty"
 // from Arduino IDE library manager ("Tools" -> "Manage Libraries")
 
 // Now you can upload this sketch to Arduino
@@ -86,18 +97,15 @@ const char NAME[NAME_LENGTH] = "Rick";               // Name of current tracker,
 // If something went wrong you can enable
 // "debug mode" through the serial port.
 // Don't forget to disconnect the bluetooth module.
-// Then open “Tools” -> ”Serial monitor” in Arduino IDE.
-#define DEBUG_MODE true  // change "false" to "true" to enable
-// Next, logs levels for comfortable deallbugging, 
-// if DEBUG_MODE == false, logs level are not important 
+// Then open "Tools" -> "Serial monitor" in Arduino IDE.
+#define DEBUG_MODE false  // change "false" to "true" to enable
+// Next, logs levels for comfortable deallbugging,
+// if DEBUG_MODE == false, logs level are not important
 #define DEBUG_BLE false  // bluetooth low energy
 #define DEBUG_GPS true  // print GPS logs
 #define DEBUG_LORA true  // print GPS logs
 #define DEBUG_MEMORY true  // print GPS logs
 #define DEBUG_AGLORA true  // print GPS logs
-
-
-
 
 // ========================================
 // ==== Settings LEVEL 2 (optional) =======
@@ -123,11 +131,12 @@ struct DATA {
   unsigned char minute;
   unsigned char second;
 
-  unsigned char sat;
-  unsigned char hdop;
+  bool gpsValid;
 
   // Add more data fields here if you need
   // ...
+  //unsigned char sat;
+  //unsigned char hdop;
   unsigned char battery;
   // unsigned char speed;
   // unsigned char sensor1;
@@ -135,92 +144,34 @@ struct DATA {
   // ...
 };
 
-/*
-This is a function that sends data to the app.
-Data packets are sent using OsmAnd-like protocol:
-id=name&lat={0}&lon={1}&timestamp={2}&speed={3}&altitude={4}
-*/
-String sendToPhone(DATA *package) {
-
-  String result;
-
-  result += F("&name=");  //other tracker's name
-  result += package->name;  //NAME_LENGTH bytes
-
-  result += F("&lat=");       // cordinates
-  result += String(package->lat, 6);  // latitude
-  result += F("&lon=");       // record separator
-  result += String(package->lon, 6);  // longitute
-
-  //Date and time format: 2023-06-07T15:21:00Z
-  result += F("&timestamp=");      // record separator
-  result += package->year + 2000;  // year
-  result += F("-");                // data separator
-  if (package->month < 10) result += F("0");
-  result += package->month;        // month
-  result += F("-");                // data separator
-  if (package->day < 10) result += F("0");
-  result += package->day;          // day
-  result += F("T");                // record separator
-  if (package->hour < 10) result += F("0");
-  result += package->hour;         // hour
-  result += F(":");                // time separator
-  if (package->minute < 10) result += F("0");
-  result += package->minute;       // minute
-  result += F(":");                // time separator
-  if (package->second < 10) result += F("0");
-  result += package->second;       // second
-  result += F("Z");                // UTC
-
-  // Sensors and additional data
-  result += F("&sat="); 
-  result += package->sat;  // satellites  1 byte
-
-  result += F("&hdop="); 
-  result += package->hdop;  // HDOP  1 byte
-
-  // Add more data here if you need ...
-  // result += "&speed=";       // data's name in app
-  // result += package->speed;   // value
-
-  result += "&batt=";
-  result += package->battery;
-
-  // result += "&alienSensor=";
-  // result += package->sensor1;
-
-  // result += "&C-137-level=";
-  // result += package->sensor2;
-
-  return result;
-}
-
-
+// Forward declarations for functions that are defined later
+String sendToPhone(DATA *package);
+String sendBatteryToPhone();
 
 // ========================================
 // ==== Settings LEVEL 3 (nightmare) ======
 // ========================================
 #define USE_EEPROM_MEMORY false  // "false" by default
 // set "false" to use SRAM memory, "true" to use EEPROM
-// EEPROM is permanent memory, data is not lost even 
+// EEPROM is permanent memory, data is not lost even
 // if the system is turned off.
 // But the write operation is finite and usually capped at 100,000 cycles.
 // Please read: https://docs.arduino.cc/learn/programming/memory-guide
 // ============ LORA NETWORK SETTINGS ============
 #define I_WANT_TO_SEND_MY_LOCATION true  // "true" by default
-#define DATA_SENDING_INTERVAL 30000  // milliseconds
+#define DATA_SENDING_INTERVAL 30000  // milliseconds (seconds * 1000)
 
 #define MESH_MODE true  // "true" by default
 #define TTL 3  // Data packet lifetime (for transfer between devices)
 // ============ OTHER SETTINGS ==========
 #define USE_BLE true  // use BLE output
-#define BLE_UPDATE_INTERVAL 50000  // milliseconds
+#define BLE_UPDATE_INTERVAL 50000  // milliseconds (seconds * 1000)
 // ============ SRAM STORAGE ==============
 // Maximum number of track points (struct DATA) in memory
 // Change and check free memory in "Output" after pressing "Verify".
 #define SRAM_STORAGE_SIZE 15    // DATA array size
 // not used if USE_EEPROM_MEMORY true, may be zero in this case
-// NOTE: Don't use all free memory! It's may broke BLE output. 
+// NOTE: Don't use all free memory! It's may broke BLE output.
 // You should hold free memory for return String from "sendToPhone"
 // ============ EEPROM STORAGE ==============
 // EEPROM (non-volatile) memory
@@ -229,14 +180,20 @@ String sendToPhone(DATA *package) {
 // reserve for storing settings
 // not used if USE_EEPROM_MEMORY false
 // ================ TESTS ==================
-#define TEST_LORA_DATA false // test mode (virtual tracker)
-#define OTHER_NAME "Summer" // virtual tracker's name
+#define TEST_LORA_DATA false
+#define OTHER_NAME "Summer" // virtual tracker's name, don't forget about NAME_LENGTH
 // =========================================
 // ========== END OF SETTINGS ==============
 // =========================================
 
-
-
+// ====================== INDICATION SECTION =======================
+/*
+  ___   _   _   ____    ___    ____      _      _____   ___    ___    _   _
+ |_ _| | \ | | |  _ \  |_ _|  / ___|    / \    |_   _| |_ _|  / _ \  | \ | |
+  | |  |  \| | | | | |  | |  | |       / _ \     | |    | |  | | | | |  \| |
+  | |  | |\  | | |_| |  | |  | |___   / ___ \    | |    | |  | |_| | | |\  |
+ |___| |_| \_| |____/  |___|  \____| /_/   \_\   |_|   |___|  \___/  |_| \_|
+*/
 
 enum class GPSStatuses
 {
@@ -289,686 +246,6 @@ private:
     const byte loraDelaySec = 1;
     unsigned long lastLoraUpdateTime;
 };
-
-
-
-
-
-class IMemory {         // interface
-    public:
-        virtual void setup() = 0;
-
-        virtual void clearAllPositions() = 0;
-        virtual bool checkUnique(DATA *newPoint) = 0;
-        virtual unsigned int save(DATA *newData) = 0;
-        virtual DATA * load(unsigned int index) = 0;
-
-        virtual bool checkCRC() = 0;    // all memory
-        virtual bool checkCRC(unsigned int index) = 0;
-
-        virtual unsigned int getSize() = 0;
-        virtual unsigned int getIndex() = 0;
-        virtual bool getStorageOverwrite() = 0;
-};
-
-
-
-
-
-class BLE_HM10
-{
-public:
-    BLE_HM10();
-    void setup();
-    String read();
-    void send(String * package);
-
-private:
-    const byte MTU = 22;
-    void sendCommand(const String command);
-};
-
-class GPS
-{
-    SoftwareSerial gpsPort;
-    TinyGPSPlus gpsModule;
-public:
-    GPS(uint8_t pinRx, uint8_t pinTx, long speed, INDICATION * indication);
-    void setup();
-    void updateLocation(DATA *dataPackage);
-
-
-private:
-    bool _debugMode;
-    INDICATION * _indication;
-    void printGPSInfo();
-    void printReadingIndication(unsigned long start, unsigned int delay);
-    char _readingIndicator = 0;
-};
-
-
-struct LORADATA
-{
-    DATA data;
-    unsigned char ttl;   // time to live (for mesh network)
-};
-
-
-class LORA
-{
-    SoftwareSerial loraPort;
-    LoRa_E220 e220ttl;
-public:
-    LORA(uint8_t pinRx, uint8_t pinTx, long speed, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION * indication);
-    void setup();
-    void send(LORADATA *loraDataPackage);
-    bool hasNewData(LORADATA *loraDataPackage);
-
-
-private:
-    bool _debugMode;
-    uint8_t _ledPin;
-    INDICATION * _indication;
-    ResponseStructContainer rsc;
-};
-
-
-
-
-
-class TESTS
-{
-public:
-    bool hasNewDataEveryXSec(LORADATA *loraDataPacket, GPS *gps, byte interval);
-
-private:
-    unsigned long _timeOfLastSendedPacket = 0;
-
-};
-
-
-unsigned char calculateCRC(unsigned char *buffer, unsigned char size);
-
-
-struct EEPROMDATA {
-     unsigned char counter;
-     DATA data;
-     unsigned char crc;
-  };
-
-
-
-class EEPROMAglora : public IMemory
-{
-public:
-    EEPROMAglora();
-    void setup();
-    bool checkUnique(DATA *newPoint);
-    unsigned int save(DATA *newData);
-    DATA *load(unsigned int index);
-    void clearAllPositions();
-    bool checkCRC();
-    bool checkCRC(unsigned int index);
-    unsigned int getSize();
-    unsigned int getIndex();
-    bool getStorageOverwrite();
-
-private:
-
-    EEPROMDATA eepromdata;
-    unsigned int EEPROMStorageIndex = 0;  // index in memory (address = EEPROMStorageIndex * EEPROMDataSize)  
-    unsigned int incrementCounter = 0;             // min 0, max 254 (because default EEPROM is 255)
-
-    unsigned int EEPROMStorageSize;
-    byte dataSize;
-    bool storageOverwrite = false;
-
-    const unsigned char EEPROMDataSize = sizeof(EEPROMDATA);
-};
-
-
-
-struct SRAMDATA
-{
-    DATA data;
-    unsigned char crc;
-};
-
-
-class SRAM: public IMemory
-{
-public:
-    SRAM();
-    void setup();
-    bool checkUnique(DATA *newPoint);
-    unsigned int save(DATA *newData); //function returns the index
-    DATA * load(unsigned int index);
-    void clearAllPositions();
-    bool checkCRC();
-    bool checkCRC(unsigned int index);
-    unsigned int getSize();
-    unsigned int getIndex();
-    bool getStorageOverwrite();
-
-private:
-    SRAMDATA storage[SRAM_STORAGE_SIZE];
-    unsigned int storageIndex = 0;
-    bool storageOverwrite = false;
-    byte dataSize;
-    bool checkCRC(SRAMDATA *point);
-};
-
-
-
-
-
-class AGLORA
-{
-public:
-  AGLORA(IMemory * memory, BLE_HM10 * ble);
-  void hello();
-  void checkMemoryToBLE();
-  void clearDataPacket(DATA * trackerData);
-  void updateSensors(DATA * trackerData);
-  void printPackage(LORADATA * loraDataPacket);
-  void getRequest(String request);
-  void sendPackageToBLE(DATA * trackerData, int index);
-
-private:
-  IMemory * _memory;
-  BLE_HM10 * _ble;
-  void sendAllPackagesToBLE();
-  void sendPackageToBLEFromStorage(unsigned int index);
-
-};
-
-
-
-void AGLORA::updateSensors(DATA *loraDataPacket)
-{
-    loraDataPacket->battery = 100; // just for example
-
-#if DEBUG_MODE && DEBUG_AGLORA
-    Serial.print(F("🟢[AGLoRa sensors: "));
-    Serial.print(F("🔋 - "));
-    Serial.print(loraDataPacket->battery);
-    Serial.println(F("]"));
-#endif
-}
-
-
-const String bleProtocolPrefix = "AGLoRa-";
-const String bleProtocolTypePoint = "point";
-const String bleProtocolTypeMemory = "memory";
-const String bleProtocolVersion = "&ver=2.1";
-const String bleProtocolParamCRC = "&crc=";
-const String bleProtocolOK = "ok";
-const String bleProtocolError = "error";
-
-const String bleProtocolParamMemorySize = "&memsize=";
-const String bleProtocolParamMemoryOverwrite = "&overwrite=";
-const String bleProtocolParamMemoryIndex = "&index=";
-
-const String bleProtocolDivider = "\r\n";
-
-AGLORA::AGLORA(IMemory *memory, BLE_HM10 *ble)
-{
-  _ble = ble;
-  _memory = memory;
-}
-
-void AGLORA::hello()
-{
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.println(F("[power on]"));
-
-  Serial.print(F("Waiting | "));
-  for (int i = 0; i < 50; i++)
-  {
-    Serial.print(F("#"));
-    delay(50);
-  }
-  Serial.println();
-  Serial.println(F("AGLORA tracker started..."));
-#endif
-}
-
-/// @brief
-/// 1. clear
-/// 2. set name
-/// 3. set default ttl
-/// @param loraDataPacket
-void AGLORA::clearDataPacket(DATA *trackerData)
-{
-  memset(trackerData, 0, sizeof(&trackerData));
-  strcpy(trackerData->name, NAME);
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.println(F("🟢[AGLoRa: time to send your location📍, new loraDataPacket prepared 📦]"));
-#endif
-}
-
-void AGLORA::printPackage(LORADATA *loraDataPacket)
-{
-  // DEBUG_MODE
-#if DEBUG_MODE && DEBUG_AGLORA // dump out what was just received
-  Serial.println(F("🟢[AGLoRa: loraDataPacket now contains ↴]"));
-  Serial.print(F("     Name: "));
-  Serial.print(loraDataPacket->data.name);
-  Serial.print(F(", lat: "));
-  Serial.print(loraDataPacket->data.lat, 6);
-  Serial.print(F(", lon: "));
-  Serial.print(loraDataPacket->data.lon, 6);
-  Serial.print(F(", sat: "));
-  Serial.print(loraDataPacket->data.sat);
-  Serial.print(F(", hdop: "));
-  Serial.print(loraDataPacket->data.hdop);
-
-  Serial.print(F(", date: "));
-  Serial.print(loraDataPacket->data.year);
-  Serial.print(F("/"));
-  if (loraDataPacket->data.month < 10)
-    Serial.print(F("0"));
-  Serial.print(loraDataPacket->data.month);
-  Serial.print(F("/"));
-  if (loraDataPacket->data.day < 10)
-    Serial.print(F("0"));
-  Serial.print(loraDataPacket->data.day);
-
-  Serial.print(F(", time: "));
-  Serial.print(loraDataPacket->data.hour);
-  Serial.print(F(":"));
-  if (loraDataPacket->data.minute < 10)
-    Serial.print(F("0"));
-  Serial.print(loraDataPacket->data.minute);
-  Serial.print(F(":"));
-  if (loraDataPacket->data.second < 10)
-    Serial.print(F("0"));
-  Serial.print(loraDataPacket->data.second);
-  Serial.print(F(" (UTC)"));
-
-  Serial.print(F(" TTL="));
-  Serial.print(loraDataPacket->ttl);
-
-  Serial.println();
-#endif
-}
-
-void AGLORA::getRequest(String request)
-{
-  if (request.length() == 0)
-  {
-    return;
-  }
-
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.println();
-  Serial.print(F("🟢[AGLoRa: 📭 BLE request received <<"));
-  Serial.print(request);
-  Serial.println(F(">> received]"));
-  Serial.println();
-#endif
-
-  if (request.startsWith(F("crc")))
-  {
-    checkMemoryToBLE();
-    return;
-  }
-
-  if (request.startsWith(F("clear")))
-  {
-    _memory->clearAllPositions();
-    checkMemoryToBLE();
-    return;
-  }
-
-  if (request.startsWith(F("all")))
-  {
-    sendAllPackagesToBLE();
-    return;
-  }
-
-  if (request.startsWith(F("id")))
-  {
-    request.remove(0, 2);
-    unsigned int index = request.toInt();
-    sendPackageToBLEFromStorage(index);
-
-    return;
-  }
-}
-
-void AGLORA::checkMemoryToBLE()
-{
-  String response = bleProtocolPrefix +
-                    bleProtocolTypeMemory +
-                    bleProtocolVersion;
-  response += bleProtocolParamCRC;
-  response += _memory->checkCRC() ? bleProtocolOK : bleProtocolError;
-  response += bleProtocolParamMemorySize + _memory->getSize();
-  response += bleProtocolParamMemoryIndex + _memory->getIndex();
-  response += bleProtocolParamMemoryOverwrite + _memory->getStorageOverwrite();
-  response += bleProtocolDivider;
-  _ble->send(&response);
-}
-
-void AGLORA::sendPackageToBLE(DATA *trackerData, int index)
-{
-  String response = bleProtocolPrefix +
-                    bleProtocolTypePoint +
-                    bleProtocolVersion;
-
-  response += sendToPhone(trackerData);
-  response += bleProtocolParamMemoryIndex + index;
-  response += bleProtocolParamCRC;
-  response += _memory->checkCRC(index) ? bleProtocolOK : bleProtocolError;
-  response += bleProtocolDivider;
-
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.print(F("🟢AGLoRa: send point 📦 to BLE → "));
-  Serial.print(response);
-#endif
-
-  _ble->send(&response);
-}
-
-void AGLORA::sendAllPackagesToBLE()
-{
-  unsigned int maxIndex = _memory->getStorageOverwrite() ? _memory->getSize() : _memory->getIndex();
-  for (unsigned int i = 0; i < maxIndex; ++i)
-  {
-#if DEBUG_MODE && DEBUG_AGLORA
-    Serial.print(F("🟢[AGLoRa: loading "));
-    Serial.print(i + 1);
-    Serial.print(F("/"));
-    Serial.print(maxIndex);
-    Serial.print(F(" 📦 from memory ]"));
-#endif
-
-    sendPackageToBLE(_memory->load(i), i);
-  }
-
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.println();
-#endif
-}
-
-void AGLORA::sendPackageToBLEFromStorage(unsigned int index)
-{
-#if DEBUG_MODE && DEBUG_AGLORA
-  Serial.print(F("🟢[AGLoRa: loading 📦  from index "));
-  Serial.print(index);
-  Serial.print(F("]"));
-#endif
-
-  if ((_memory->getStorageOverwrite() == false) && (_memory->getIndex() == 0))
-  {
-#if DEBUG_MODE && DEBUG_AGLORA
-    Serial.println(F("- error 🚨 empty memory 🚨"));
-#endif
-
-    String response = bleProtocolPrefix +
-                      bleProtocolTypeMemory +
-                      bleProtocolVersion;
-    response += bleProtocolParamMemorySize + _memory->getSize();
-    response += bleProtocolParamMemoryIndex + _memory->getIndex();
-    response += bleProtocolParamMemoryOverwrite + _memory->getStorageOverwrite();
-    response += bleProtocolDivider;
-    _ble->send(&response);
-
-    return;
-  }
-
-  unsigned int maxIndex = _memory->getStorageOverwrite() ? _memory->getSize() : _memory->getIndex();
-  if (index > maxIndex - 1)
-  {
-#if DEBUG_MODE && DEBUG_AGLORA
-    Serial.println(F("- error 🚨 index out of range 🚨"));
-#endif
-    return;
-    // TODO: send error
-  }
-
-  sendPackageToBLE(_memory->load(index), index);
-}
-
-
-
-BLE_HM10::BLE_HM10()
-{
-}
-
-void BLE_HM10::setup()
-{
-#if DEBUG_MODE && DEBUG_BLE
-    Serial.print(F("📲[BLE: ready for work ✅. Maximum Transmission Unit (MTU) = "));
-    Serial.print(MTU);
-    Serial.println(F("]"));
-#endif
-#if !DEBUG_MODE
-    sendCommand(F("AT"));
-    sendCommand(F("AT+NAMEAGLoRa"));
-    sendCommand(F("AT+ROLE0"));
-#endif
-}
-
-String BLE_HM10::read()
-{
-    String result = "";
-    while (Serial.available())
-    {
-        result += Serial.readString(); // read until timeout
-    }
-    result.trim(); // remove any \r \n whitespace at the end of the String
-
-    return result;
-}
-
-void BLE_HM10::send(String *package)
-{
-#if DEBUG_MODE && DEBUG_BLE
-    Serial.print(F("📲[BLE: 📫 Sending: "));
-    Serial.print(*package);
-
-    Serial.print(F("\t"));
-    for (byte i = 1; i <= MTU; ++i)
-    {
-        Serial.print(i % 10);
-    }
-    Serial.print(F(" (MTU = "));
-    Serial.print(MTU);
-    Serial.println(F(")"));
-#endif
-
-    bool isStringNotEmpty = true;
-    while (isStringNotEmpty)
-    {
-#if DEBUG_MODE && DEBUG_BLE
-        Serial.print(F("\t"));
-#endif
-        String nextSendMTU = package->substring(0, MTU);
-        package->remove(0, MTU);
-        isStringNotEmpty = package->length() != 0;
-
-#if !DEBUG_MODE && !DEBUG_BLE
-        // important part
-        Serial.print(nextSendMTU); //  here we send data to BLE
-        delay(10);
-#endif
-
-#if DEBUG_MODE && DEBUG_BLE
-        if (isStringNotEmpty)
-            Serial.println(F(" ⮐"));
-#endif
-    }
-}
-
-void BLE_HM10::sendCommand(const String command)
-{
-    Serial.println(command);
-    delay(200); // wait some time
-    while (Serial.available())
-    {
-        Serial.read();
-    }
-}
-
-
-
-GPS::GPS(uint8_t pinRx, uint8_t pinTx, long speed, INDICATION *indication) : gpsPort(pinRx, pinTx),
-                                                                             gpsModule()
-{
-    gpsPort.begin(speed);
-    _indication = indication;
-}
-
-void GPS::setup()
-{
-#if DEBUG_MODE && DEBUG_GPS
-    Serial.println(F("📡[GPS: Start GPS configuration.]"));
-#endif
-}
-
-void GPS::printGPSInfo()
-{
-#if DEBUG_MODE && DEBUG_GPS
-    Serial.print(F(" Satellites in view: "));
-    Serial.print(gpsModule.satellites.value());
-    Serial.print(F("🛰️. HDOP: "));
-    Serial.print(gpsModule.hdop.value());
-    Serial.println(F("]"));
-
-    Serial.print(F("📍 Location: "));
-    if (gpsModule.location.isValid())
-    {
-        Serial.print(gpsModule.location.lat(), 6);
-        Serial.print(F(","));
-        Serial.print(gpsModule.location.lng(), 6);
-    }
-    else
-    {
-        Serial.print(F("❌ INVALID "));
-        Serial.print(gpsModule.location.lat(), 6);
-        Serial.print(F(","));
-        Serial.print(gpsModule.location.lat(), 6);
-        Serial.print(F(","));
-        Serial.print(gpsModule.location.lng(), 6);
-    }
-
-    Serial.print(F(" 🗓️ Date/Time: "));
-    if (gpsModule.date.isValid())
-    {
-        Serial.print(gpsModule.date.month());
-        Serial.print(F("/"));
-        Serial.print(gpsModule.date.day());
-        Serial.print(F("/"));
-        Serial.print(gpsModule.date.year());
-    }
-    else
-    {
-        Serial.print(F("❌ INVALID"));
-    }
-
-    Serial.print(F(" ⏰ "));
-    if (gpsModule.time.isValid())
-    {
-        if (gpsModule.time.hour() < 10)
-            Serial.print(F("0"));
-        Serial.print(gpsModule.time.hour());
-        Serial.print(F(":"));
-        if (gpsModule.time.minute() < 10)
-            Serial.print(F("0"));
-        Serial.print(gpsModule.time.minute());
-        Serial.print(F(":"));
-        if (gpsModule.time.second() < 10)
-            Serial.print(F("0"));
-        Serial.print(gpsModule.time.second());
-        Serial.print(F("."));
-        if (gpsModule.time.centisecond() < 10)
-            Serial.print(F("0"));
-        Serial.println(gpsModule.time.centisecond());
-    }
-    else
-    {
-        Serial.println(F("INVALID"));
-    }
-#endif
-}
-
-void GPS::printReadingIndication(unsigned long start, unsigned int delay)
-{
-#if DEBUG_MODE && DEBUG_GPS
-    byte progress = (10 * (millis() - start)) / delay;
-    if (progress != _readingIndicator)
-    {
-        _readingIndicator = progress;
-        Serial.print(F("#"));
-    }
-#endif
-}
-
-void GPS::updateLocation(DATA *dataPackage)
-{
-
-#if DEBUG_MODE && DEBUG_GPS
-    Serial.print(F("📡[GPS reading: "));
-#endif
-
-    gpsPort.listen(); // switch to gps software serial
-
-    bool newData = false;
-    // For three seconds we parse GPS data and report some key values
-    const unsigned int readingDelay = 3000;
-    for (unsigned long start = millis(); millis() - start < readingDelay;)
-    {
-        printReadingIndication(start, readingDelay);
-        while (gpsPort.available() > 0)
-            if (gpsModule.encode(gpsPort.read()))
-            {
-                newData = true;
-            }
-    }
-
-    if (newData && gpsModule.location.isValid() && gpsModule.date.isValid() && gpsModule.time.isValid())
-    {
-        // data set
-        dataPackage->lat = gpsModule.location.lat();
-        dataPackage->lon = gpsModule.location.lng();
-        dataPackage->sat = gpsModule.satellites.value();
-        dataPackage->hdop = gpsModule.hdop.value() / 10;
-
-        dataPackage->year = gpsModule.date.year() - 2000;
-        dataPackage->month = gpsModule.date.month();
-        dataPackage->day = gpsModule.date.day();
-
-        dataPackage->hour = gpsModule.time.hour();
-        dataPackage->minute = gpsModule.time.minute();
-        dataPackage->second = gpsModule.time.second();
-
-        strcpy(dataPackage->name, NAME);
-
-        printGPSInfo();
-        _indication->gps(GPSStatuses::correct); // GPS is valid
-        return;
-    }
-    else
-    {
-#if DEBUG_MODE && DEBUG_GPS
-        Serial.println(F("❌ No valid data.]"));
-#endif
-        _indication->gps(GPSStatuses::invalid); // GPS is valid
-        return;
-    }
-
-    if (gpsModule.charsProcessed() < 10)
-    {
-#if DEBUG_MODE && DEBUG_GPS
-        Serial.println(F("❌ No characters received from GPS, check wiring!]"));
-#endif
-        _indication->gps(GPSStatuses::connectionError); // GPS is valid
-        return;
-    }
-}
-
 
 INDICATION::INDICATION(uint8_t gpsLedPin, uint8_t loraLedPin, uint8_t bleLedPin, uint8_t memoryLedPin)
 {
@@ -1043,12 +320,428 @@ void INDICATION::loop()
     }
 }
 
+// ======================== UTILITES ===============================
+/*
+          _     _   _   _   _
+  _   _  | |_  (_) | | (_) | |_    ___   ___
+ | | | | | __| | | | | | | | __|  / _ \ / __|
+ | |_| | | |_  | | | | | | | |_  |  __/ \__ \
+  \__,_|  \__| |_| |_| |_|  \__|  \___| |___/
+*/
 
+// CRC
+unsigned char calculateCRC(unsigned char *buffer, unsigned char size) {
+  byte crc = 0;
+  for (byte i = 0; i < size; i++) {
+    byte data = buffer[i];
+    for (int j = 8; j > 0; j--) {
+      crc = ((crc ^ data) & 1) ? (crc >> 1) ^ 0x8C : (crc >> 1);
+      data >>= 1;
+    }
+  }
+  return crc;
+}
 
-LORA::LORA(uint8_t pinRx, uint8_t pinTx, long speed, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION *indication) : loraPort(pinRx, pinTx),
-                                                                                                                    e220ttl(&loraPort, aux, m0, m1)
+// ========================== BLE SECTION ==============================
+/*
+  ____    _       _   _   _____   _____    ___     ___    _____   _   _
+ | __ )  | |     | | | | | ____| |_   _|  / _ \   / _ \  |_   _| | | | |
+ |  _ \  | |     | | | | |  _|     | |   | | | | | | | |   | |   | |_| |
+ | |_) | | |___  | |_| | | |___    | |   | |_| | | |_| |   | |   |  _  |
+ |____/  |_____|  \___/  |_____|   |_|    \___/   \___/    |_|   |_| |_|
+*/
+
+class BLE_HM10
 {
-    loraPort.begin(speed);
+public:
+    BLE_HM10();
+    void setup();
+    String read();
+    void send(String * package);
+
+private:
+    const byte MTU = 22;
+    void sendCommand(const String command);
+};
+
+BLE_HM10::BLE_HM10()
+{
+}
+
+void BLE_HM10::setup()
+{
+#if DEBUG_MODE && DEBUG_BLE
+    Serial.print(F("📲[BLE: ready for work ✅. Maximum Transmission Unit (MTU) = "));
+    Serial.print(MTU);
+    Serial.println(F("]"));
+#endif
+#if !DEBUG_MODE
+    sendCommand(F("AT"));
+    sendCommand(F("AT+NAMEAGLoRa"));
+    sendCommand(F("AT+ROLE0"));
+#endif
+}
+
+String BLE_HM10::read()
+{
+    String result = "";
+    while (Serial.available())
+    {
+        result += Serial.readString(); // read until timeout
+    }
+    result.trim(); // remove any \r \n whitespace at the end of the String
+
+    return result;
+}
+
+void BLE_HM10::send(String *package)
+{
+#if DEBUG_MODE && DEBUG_BLE
+    Serial.print(F("📲[BLE: 📫 Sending: "));
+    Serial.print(*package);
+
+    Serial.print(F("\t"));
+    for (byte i = 1; i <= MTU; ++i)
+    {
+        Serial.print(i % 10);
+    }
+    Serial.print(F(" (MTU = "));
+    Serial.print(MTU);
+    Serial.println(F(")"));
+#endif
+
+    bool isStringNotEmpty = true;
+    while (isStringNotEmpty)
+    {
+#if DEBUG_MODE && DEBUG_BLE
+        Serial.print(F("\t"));
+#endif
+        String nextSendMTU = package->substring(0, MTU);
+        package->remove(0, MTU);
+        isStringNotEmpty = package->length() != 0;
+
+#if !DEBUG_MODE && !DEBUG_BLE
+        // important part
+        Serial.print(nextSendMTU); //  here we send data to BLE
+        delay(10);
+#endif
+
+#if DEBUG_MODE && DEBUG_BLE
+        if (isStringNotEmpty)
+            Serial.println(F(" ⮐"));
+#endif
+    }
+}
+
+void BLE_HM10::sendCommand(const String command)
+{
+    Serial.println(command);
+    delay(200); // wait some time
+    while (Serial.available())
+    {
+        Serial.read();
+    }
+}
+
+// ======================= GPS SECTION =====================
+/*
+   ____   ____    ____
+  / ___| |  _ \  / ___|
+ | |  _  | |_) | \___ \
+ | |_| | |  __/   ___) |
+  \____| |_|     |____/
+*/
+
+class GPS
+{
+    SoftwareSerial gpsPort;
+public:
+    GPS(uint8_t pinRx, uint8_t pinTx, long speed, INDICATION * indication);
+    void setup();
+    void updateLocation(DATA *dataPackage);
+
+private:
+    bool _debugMode;
+    INDICATION * _indication;
+    void printReadingIndication(unsigned long start, unsigned int delay);
+    char _readingIndicator = 0;
+    bool processRMCSentence(String sentence, DATA *dataPackage);
+    bool processGGASentence(String sentence, DATA *dataPackage);
+    float convertDegMinToDecDeg(float degMin);
+};
+
+GPS::GPS(uint8_t pinRx, uint8_t pinTx, long speed, INDICATION *indication) : gpsPort(pinRx, pinTx)
+{
+    gpsPort.begin(speed);
+    _indication = indication;
+}
+
+void GPS::setup()
+{
+#if DEBUG_MODE && DEBUG_GPS
+    Serial.println(F("📡[GPS: Start GPS configuration.]"));
+#endif
+}
+
+void GPS::printReadingIndication(unsigned long start, unsigned int delay)
+{
+#if DEBUG_MODE && DEBUG_GPS
+    byte progress = (10 * (millis() - start)) / delay;
+    if (progress != _readingIndicator)
+    {
+        _readingIndicator = progress;
+        Serial.print(F("⏳"));
+    }
+#endif
+}
+
+void GPS::updateLocation(DATA *dataPackage)
+{
+#if DEBUG_MODE && DEBUG_GPS
+    Serial.print(F("📡[GPS reading: "));
+#endif
+
+    char c;
+    String sentence = "";
+
+    // For three seconds we parse GPS data and report some key values
+    const unsigned int readingDelay = 3000;
+    bool gpsReadingComplited = false;
+    bool ggaCatched = false;
+    bool rmcCatched = false;
+
+    gpsPort.listen();
+
+    for (unsigned long start = millis(); millis() - start < readingDelay;)
+    {
+        printReadingIndication(start, readingDelay);
+        while (gpsPort.available() > 0)
+        {
+            c = gpsPort.read();
+            if (c == '$')
+            {
+                // Start of a new sentence
+                sentence = "";
+            }
+            else if (c == '\n')
+            {
+                // End of a sentence process it
+                if (processRMCSentence(sentence, dataPackage))
+                    rmcCatched = true;
+                if (processGGASentence(sentence, dataPackage))
+                    ggaCatched = true;
+
+                if (ggaCatched && rmcCatched)
+                {
+                    gpsReadingComplited = true;
+                    break;
+                }
+            }
+            else
+            {
+                // Add character to the sentence
+                sentence += c;
+            }
+        }
+        if (gpsReadingComplited)
+            break;
+    }
+
+    if (dataPackage->gpsValid)
+    {
+#if DEBUG_MODE && DEBUG_GPS
+        Serial.println(" ✅ GPS data is correct.]");
+#endif
+        _indication->gps(GPSStatuses::correct); // GPS is valid
+    }
+    else
+    {
+#if DEBUG_MODE && DEBUG_GPS
+        Serial.println(F("❌ No valid data.]"));
+#endif
+        _indication->gps(GPSStatuses::invalid); // GPS is invalid
+    }
+}
+
+bool GPS::processRMCSentence(String sentence, DATA *dataPackage)
+{
+    if (sentence.startsWith("GPRMC"))
+    {
+#if DEBUG_MODE && DEBUG_GPS
+        Serial.print("✨");
+#endif
+
+        // Process RMC sentence
+        int commaIndex = sentence.indexOf(',');
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String status = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String latStr = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String latDir = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String lonStr = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String lonDir = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String speedKnots = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        // String course = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String dateStr = sentence.substring(0, commaIndex);
+
+        if (status == "A")
+        {
+            // Convert date to year, month, and day
+            dataPackage->day = dateStr.substring(0, 2).toInt();
+            ;
+            dataPackage->month = dateStr.substring(2, 4).toInt();
+            dataPackage->year = dateStr.substring(4, 6).toInt();
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool GPS::processGGASentence(String sentence, DATA *dataPackage)
+{
+    if (sentence.startsWith("GPGGA"))
+    {
+#if DEBUG_MODE && DEBUG_GPS
+        Serial.print("✨");
+#endif
+
+        // Process GGA sentence
+        int commaIndex = sentence.indexOf(',');
+        String timeStr = sentence.substring(commaIndex + 1, commaIndex + 7);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String latStr = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String latDir = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String lonStr = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String lonDir = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String fixQuality = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String satStr = sentence.substring(0, commaIndex);
+        sentence = sentence.substring(commaIndex + 1);
+
+        commaIndex = sentence.indexOf(',');
+        String hdopStr = sentence.substring(0, commaIndex);
+
+        if (fixQuality.toInt() > 0)
+        {
+            dataPackage->gpsValid = true;
+            dataPackage->lat = latStr.toFloat();
+            dataPackage->lon = lonStr.toFloat();
+            //dataPackage->sat = satStr.toInt();        // optional
+            //dataPackage->hdop = hdopStr.toFloat();    // optional
+
+            // Convert latitude and longitude to decimal degrees
+            dataPackage->lat = convertDegMinToDecDeg(dataPackage->lat);
+            dataPackage->lon = convertDegMinToDecDeg(dataPackage->lon);
+            if (latDir == "S")
+                dataPackage->lat = -dataPackage->lat;
+            if (lonDir == "W")
+                dataPackage->lon = -dataPackage->lon;
+
+            // Convert time to hours, minutes, and seconds
+            int hour = timeStr.substring(0, 2).toInt();
+            int minute = timeStr.substring(2, 4).toInt();
+            int second = timeStr.substring(4, 6).toInt();
+            dataPackage->hour = hour;
+            dataPackage->minute = minute;
+            dataPackage->second = second;
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+float GPS::convertDegMinToDecDeg(float degMin)
+{
+    float min = fmod(degMin, 100.0);
+    float deg = (degMin - min) / 100.0;
+    return deg + (min / 60.0);
+}
+
+// ======================= LORA SECTION =====================
+/*
+  _   _      _      ____    _____     _        ___    ____       _
+ | | | |    / \    |  _ \  |_   _|   | |      / _ \  |  _ \     / \
+ | | | |   / _ \   | |_) |   | |     | |     | | | | | |_) |   / _ \
+ | |_| |  / ___ \  |  _ <    | |     | |___  | |_| | |  _ <   / ___ \
+  \___/  /_/   \_\ |_| \_\   |_|     |_____|  \___/  |_| \_\ /_/   \_\
+*/
+
+struct LORADATA
+{
+    DATA data;
+    unsigned char ttl;   // time to live (for mesh network)
+};
+
+#ifdef EBYTE_E220
+class LORA
+{
+    SoftwareSerial loraPort;
+    LoRa_E220 e220ttl;
+public:
+    LORA(uint8_t pinRx, uint8_t pinTx, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION * indication);
+    void setup();
+    void send(LORADATA *loraDataPackage);
+    bool hasNewData(LORADATA *loraDataPackage);
+
+private:
+    bool _debugMode;
+    uint8_t _ledPin;
+    INDICATION * _indication;
+    ResponseStructContainer rsc;
+};
+
+LORA::LORA(uint8_t pinRx, uint8_t pinTx, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION *indication) : loraPort(pinRx, pinTx),
+                                                                                                        e220ttl(&loraPort, aux, m0, m1)
+{
+    loraPort.begin(LORA_START_SPEED);
     _indication = indication;
 }
 
@@ -1069,12 +762,14 @@ void LORA::setup()
     configuration.ADDL = 0x00;
     configuration.ADDH = 0x00;
     configuration.CHAN = 0x17;
-    configuration.SPED.uartBaudRate = UART_BPS_9600;
+    configuration.SPED.uartBaudRate = UART_BPS_57600;
     configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;
     configuration.SPED.uartParity = MODE_00_8N1;
+
     configuration.OPTION.subPacketSetting = SPS_200_00;
     configuration.OPTION.RSSIAmbientNoise = RSSI_AMBIENT_NOISE_DISABLED;
     configuration.OPTION.transmissionPower = POWER_22;
+
     configuration.TRANSMISSION_MODE.enableRSSI = RSSI_DISABLED;
     configuration.TRANSMISSION_MODE.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;
     configuration.TRANSMISSION_MODE.enableLBT = LBT_DISABLED; // monitoring before data transmitted
@@ -1091,6 +786,9 @@ void LORA::setup()
     Serial.print(configuration.OPTION.getTransmissionPowerDescription());
     Serial.println(F("]"));
 #endif
+
+    loraPort.end();
+    loraPort.begin(57600);
 }
 
 void LORA::send(LORADATA *loraDataPacket)
@@ -1188,8 +886,197 @@ bool LORA::hasNewData(LORADATA *loraDataPacket)
     }
     return false;
 }
+#endif
 
+#ifdef EBYTE_E32
+class LORA
+{
+    SoftwareSerial loraPort;
+    LoRa_E32 e32ttl;
+public:
+    LORA(uint8_t pinRx, uint8_t pinTx, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION * indication);
+    void setup();
+    void send(LORADATA *loraDataPackage);
+    bool hasNewData(LORADATA *loraDataPackage);
 
+private:
+    bool _debugMode;
+    uint8_t _ledPin;
+    INDICATION * _indication;
+    ResponseStructContainer rsc;
+};
+
+LORA::LORA(uint8_t pinRx, uint8_t pinTx, uint8_t aux, uint8_t m0, uint8_t m1, INDICATION *indication) : loraPort(pinRx, pinTx),
+                                                                                                        e32ttl(&loraPort, aux, m0, m1)
+{
+    loraPort.begin(LORA_START_SPEED);
+    _indication = indication;
+}
+
+void LORA::setup()
+{
+#if DEBUG_MODE && DEBUG_LORA
+    Serial.println(F("🛜 [LORA: Start configuration]"));
+#endif
+
+    e32ttl.begin();
+    e32ttl.resetModule();
+
+    ResponseStructContainer c;
+    c = e32ttl.getConfiguration();
+    Configuration configuration = *(Configuration *)c.data;
+    delay(100);
+
+    configuration.ADDL = 0x0;
+    configuration.ADDH = 0x1;
+    configuration.CHAN = 0x17;                                             // Channel. (410 + CHAN*1MHz) MHz. Default 17H (433MHz)
+    configuration.OPTION.fec = FEC_1_ON;                                   // FEC_0_OFF / FEC_1_ON (default)  - Forward Error Correction Switch
+    configuration.OPTION.fixedTransmission = FT_TRANSPARENT_TRANSMISSION;  // FT_TRANSPARENT_TRANSMISSION (default) / FT_FIXED_TRANSMISSION
+    configuration.OPTION.ioDriveMode = IO_D_MODE_PUSH_PULLS_PULL_UPS;      // IO_D_MODE_OPEN_COLLECTOR / IO_D_MODE_PUSH_PULLS_PULL_UPS
+    configuration.OPTION.transmissionPower = POWER_20;                   // 21/24/27/30 dBm if define E32_TTL_1W
+    configuration.OPTION.wirelessWakeupTime = WAKE_UP_250;                 // 250 (default)/500/750/1000/1250/1500/1750/2000
+    configuration.SPED.airDataRate = AIR_DATA_RATE_010_24;                 // AIR_DATA_RATE_000_03 - 0.3kbps
+                                                                           // AIR_DATA_RATE_001_12 - 1.2kbps
+                                                                           // AIR_DATA_RATE_010_24 - 2.4kbps (default)
+                                                                           // AIR_DATA_RATE_011_48 - 4.8kbps
+                                                                           // AIR_DATA_RATE_100_96 - 9.6kbps
+                                                                           // AIR_DATA_RATE_101_192 - 19.2kbps
+                                                                           // AIR_DATA_RATE_110_192 - 19.2kbps (same 101)
+                                                                           // AIR_DATA_RATE_111_192 - 19.2kbps (same 101)
+    configuration.SPED.uartBaudRate = UART_BPS_9600;
+    configuration.SPED.uartParity = MODE_00_8N1;
+
+    e32ttl.setConfiguration(configuration, WRITE_CFG_PWR_DWN_SAVE);
+    delay(100);
+#if DEBUG_MODE && DEBUG_LORA
+    Serial.print(F("\t🛜 [LORA current config: channel = "));
+    Serial.print(configuration.getChannelDescription());
+
+    Serial.print(F(" , airDataRate = "));
+    Serial.print(configuration.SPED.getAirDataRate());
+
+    Serial.print(F(" , transmissionPower = "));
+    Serial.print(configuration.OPTION.getTransmissionPowerDescription());
+    Serial.println(F("]"));
+#endif
+
+    loraPort.end();
+    loraPort.begin(57600);
+}
+
+void LORA::send(LORADATA *loraDataPacket)
+{
+    loraPort.listen();
+    const byte LORADATASIZE = sizeof(LORADATA);
+
+#if DEBUG_MODE && DEBUG_LORA
+    Serial.print(F("🛜 [LoRa: Sending 📫, "));
+    Serial.print(LORADATASIZE);
+    Serial.print(F(" bytes are ready to send"));
+    Serial.print(F(" ➜ "));
+    Serial.print(loraDataPacket->data.name);
+    Serial.print(F(" / "));
+    Serial.print(loraDataPacket->data.lat, 6);
+    Serial.print(F(" "));
+    Serial.print(loraDataPacket->data.lon, 6);
+    Serial.print(F(" / "));
+    Serial.print(loraDataPacket->data.year);
+    Serial.print(F("-"));
+    if (loraDataPacket->data.month < 10)
+        Serial.print(F("0"));
+    Serial.print(loraDataPacket->data.month);
+    Serial.print(F("-"));
+    if (loraDataPacket->data.day < 10)
+        Serial.print(F("0"));
+    Serial.print(loraDataPacket->data.day);
+    Serial.print(F(" "));
+    Serial.print(loraDataPacket->data.hour);
+    Serial.print(F(":"));
+    if (loraDataPacket->data.minute < 10)
+        Serial.print(F("0"));
+    Serial.print(loraDataPacket->data.minute);
+    Serial.print(F(" (UTC)"));
+    Serial.print(F(" TTL="));
+    Serial.print(loraDataPacket->ttl);
+    Serial.print(F("] ➜ "));
+#endif
+
+    ResponseStatus rs = e32ttl.sendMessage(loraDataPacket, LORADATASIZE);
+
+#if DEBUG_MODE && DEBUG_LORA
+    Serial.print(F("[Status: "));
+    Serial.print(rs.getResponseDescription());
+#endif
+
+    if (rs.code == 1)
+    {
+#if DEBUG_MODE && DEBUG_LORA
+        Serial.print(F(" 🆗"));
+#endif
+        _indication->lora(LoRaStatuses::dataTransmitted);
+    }
+    else
+    {
+#if DEBUG_MODE && DEBUG_LORA
+        Serial.print(F(" 🚨"));
+#endif
+        _indication->lora(LoRaStatuses::error);
+    }
+
+#if DEBUG_MODE && DEBUG_LORA
+    Serial.println(F("]"));
+    Serial.println();
+#endif
+}
+
+bool LORA::hasNewData(LORADATA *loraDataPacket)
+{
+    if (e32ttl.available() > 1)
+    {
+#if DEBUG_MODE && DEBUG_LORA
+        Serial.println(F("🛜 [LORA: we have new data 🥳]"));
+#endif
+
+        rsc = e32ttl.receiveMessage(sizeof(LORADATA));
+        if (rsc.status.code != 1)
+        {
+#if DEBUG_MODE && DEBUG_LORA
+            Serial.println(F("🛜 [LORA error: ❌ status - "));
+            Serial.println(rsc.status.getResponseDescription());
+            Serial.println(F("]"));
+#endif
+            _indication->lora(LoRaStatuses::error);
+            return false;
+        }
+        else
+        {
+            memcpy(loraDataPacket, (LORADATA *)rsc.data, sizeof(LORADATA));
+            rsc.close();
+        }
+        _indication->lora(LoRaStatuses::dataReceived);
+        return true;
+    }
+    return false;
+}
+#endif
+
+// ================= TESTS SECTION =================
+/*
+ _____   _____   ____    _____   ____
+ |_   _| | ____| / ___|  |_   _| / ___|
+   | |   |  _|   \___ \    | |   \___ \
+   | |   | |___   ___) |   | |    ___) |
+   |_|   |_____| |____/    |_|   |____/
+*/
+
+class TESTS
+{
+public:
+    bool hasNewDataEveryXSec(LORADATA *loraDataPacket, GPS *gps, byte interval);
+
+private:
+    unsigned long _timeOfLastSendedPacket = 0;
+};
 
 bool TESTS::hasNewDataEveryXSec(LORADATA *loraDataPacket, GPS *gps, byte interval)
 {
@@ -1218,21 +1105,64 @@ bool TESTS::hasNewDataEveryXSec(LORADATA *loraDataPacket, GPS *gps, byte interva
         return false;
 }
 
+/*
 
-// CRC
-unsigned char calculateCRC(unsigned char *buffer, unsigned char size) {
-  byte crc = 0;
-  for (byte i = 0; i < size; i++) {
-    byte data = buffer[i];
-    for (int j = 8; j > 0; j--) {
-      crc = ((crc ^ data) & 1) ? (crc >> 1) ^ 0x8C : (crc >> 1);
-      data >>= 1;
-    }
-  }
-  return crc;
-}
+  _ __ ___     ___   _ __ ___     ___    _ __   _   _
+ | '_ ` _ \   / _ \ | '_ ` _ \   / _ \  | '__| | | | |
+ | | | | | | |  __/ | | | | | | | (_) | | |    | |_| |
+ |_| |_| |_|  \___| |_| |_| |_|  \___/  |_|     \__, |
+                                                |___/
+*/
 
-#include <EEPROM.h>
+class IMemory {         // interface
+    public:
+        virtual void setup() = 0;
+
+        virtual void clearAllPositions() = 0;
+        virtual bool checkUnique(DATA *newPoint) = 0;
+        virtual unsigned int save(DATA *newData) = 0;
+        virtual DATA * load(unsigned int index) = 0;
+
+        virtual bool checkCRC() = 0;    // all memory
+        virtual bool checkCRC(unsigned int index) = 0;
+
+        virtual unsigned int getSize() = 0;
+        virtual unsigned int getIndex() = 0;
+        virtual bool getStorageOverwrite() = 0;
+};
+
+struct EEPROMDATA {
+     unsigned char counter;
+     DATA data;
+     unsigned char crc;
+};
+
+class EEPROMAglora : public IMemory
+{
+public:
+    EEPROMAglora();
+    void setup();
+    bool checkUnique(DATA *newPoint);
+    unsigned int save(DATA *newData);
+    DATA *load(unsigned int index);
+    void clearAllPositions();
+    bool checkCRC();
+    bool checkCRC(unsigned int index);
+    unsigned int getSize();
+    unsigned int getIndex();
+    bool getStorageOverwrite();
+
+private:
+    EEPROMDATA eepromdata;
+    unsigned int EEPROMStorageIndex = 0;  // index in memory (address = EEPROMStorageIndex * EEPROMDataSize)
+    unsigned int incrementCounter = 0;             // min 0, max 254 (because default EEPROM is 255)
+
+    unsigned int EEPROMStorageSize;
+    byte dataSize;
+    bool storageOverwrite = false;
+
+    const unsigned char EEPROMDataSize = sizeof(EEPROMDATA);
+};
 
 EEPROMAglora::EEPROMAglora()
 {
@@ -1395,7 +1325,6 @@ DATA *EEPROMAglora::load(unsigned int index)
 
 void EEPROMAglora::clearAllPositions()
 {
-
 #if DEBUG_MODE && DEBUG_MEMORY
     const byte rowLength = 120;
     int cellsCounter = 0;
@@ -1418,7 +1347,6 @@ void EEPROMAglora::clearAllPositions()
                 Serial.println();
                 Serial.print(F("\t"));
             }
-
 #endif
         }
     }
@@ -1471,7 +1399,6 @@ bool EEPROMAglora::checkCRC()
         unsigned char crc = calculateCRC((unsigned char *)&eepromdata.data, sizeof(eepromdata.data));
 
 #if DEBUG_MODE && DEBUG_MEMORY
-
         if (eepromdata.counter < 100)
             Serial.print(F(" "));
         if (eepromdata.counter < 10)
@@ -1500,7 +1427,6 @@ bool EEPROMAglora::checkCRC()
         if (eepromdata.counter != 255)
         {
             if (crc == eepromdata.crc)
-
             {
 #if DEBUG_MODE && DEBUG_MEMORY
                 Serial.print(F("✅"));
@@ -1567,7 +1493,34 @@ bool EEPROMAglora::getStorageOverwrite()
     return storageOverwrite;
 }
 
+struct SRAMDATA
+{
+    DATA data;
+    unsigned char crc;
+};
 
+class SRAM: public IMemory
+{
+public:
+    SRAM();
+    void setup();
+    bool checkUnique(DATA *newPoint);
+    unsigned int save(DATA *newData); //function returns the index
+    DATA * load(unsigned int index);
+    void clearAllPositions();
+    bool checkCRC();
+    bool checkCRC(unsigned int index);
+    unsigned int getSize();
+    unsigned int getIndex();
+    bool getStorageOverwrite();
+
+private:
+    SRAMDATA storage[SRAM_STORAGE_SIZE];
+    unsigned int storageIndex = 0;
+    bool storageOverwrite = false;
+    byte dataSize;
+    bool checkCRC(SRAMDATA *point);
+};
 
 SRAM::SRAM()
 {
@@ -1620,15 +1573,6 @@ bool SRAM::checkUnique(DATA *newPoint)
     {
 #if DEBUG_MODE && DEBUG_MEMORY
         Serial.print(F("#"));
-
-        // Serial.println();
-        // Serial.print(newPoint->name); Serial.print(F("\t - "));Serial.println(storage[i].data.name);
-        // Serial.print(newPoint->year); Serial.print(F("\t - "));Serial.println(storage[i].data.year);
-        // Serial.print(newPoint->month); Serial.print(F("\t - "));Serial.println(storage[i].data.month);
-        // Serial.print(newPoint->day); Serial.print(F("\t - "));Serial.println(storage[i].data.day);
-        // Serial.print(newPoint->hour); Serial.print(F("\t - "));Serial.println(storage[i].data.hour);
-        // Serial.print(newPoint->minute); Serial.print(F("\t - "));Serial.println(storage[i].data.minute);
-        // Serial.print(newPoint->second); Serial.print(F("\t - "));Serial.println(storage[i].data.second);
 #endif
 
         if ((strcmp(newPoint->name, storage[i].data.name) == 0) &&
@@ -1773,7 +1717,6 @@ bool SRAM::checkCRC()
         }
 
 #if DEBUG_MODE && DEBUG_MEMORY // Memory visualisation
-
         if ((i + 1) % rowLength == 0)
         {
             Serial.println();
@@ -1785,7 +1728,6 @@ bool SRAM::checkCRC()
             if ((i + 1) % rowDivider == 0)
                 Serial.print(F(" · "));
         }
-
 #endif
     }
 
@@ -1827,10 +1769,433 @@ bool SRAM::getStorageOverwrite()
     return storageOverwrite;
 }
 
+/*****************************************************
+     _       ____   _        ___    ____       _
+    / \     / ___| | |      / _ \  |  _ \     / \
+   / _ \   | |  _  | |     | | | | | |_) |   / _ \
+  / ___ \  | |_| | | |___  | |_| | |  _ <   / ___ \
+ /_/   \_\  \____| |_____|  \___/  |_| \_\ /_/   \_\
+******************************************************/
+
+class AGLORA
+{
+public:
+  AGLORA(IMemory * memory, BLE_HM10 * ble);
+  void hello();
+  void checkMemoryToBLE();
+  void clearDataPacket(DATA * trackerData);
+  void updateSensors(DATA * trackerData);
+  void printPackage(LORADATA * loraDataPacket);
+  void getRequest(String request);
+  void sendPackageToBLE(DATA * trackerData, int index);
+
+private:
+  IMemory * _memory;
+  BLE_HM10 * _ble;
+  void sendAllPackagesToBLE();
+  void sendLastPackagesToBLE();
+  void sendPackageToBLEFromStorage(unsigned int index);
+  bool isDataMoreRecent(DATA * newData, DATA * oldData);
+};
+
+void AGLORA::updateSensors(DATA *loraDataPacket)
+{
+    loraDataPacket->battery = 100; // just for example
+
+#if DEBUG_MODE && DEBUG_AGLORA
+    Serial.print(F("🟢[AGLoRa sensors: "));
+    Serial.print(F("🔋 - "));
+    Serial.print(loraDataPacket->battery);
+    Serial.println(F("]"));
+#endif
+}
+
+const String bleProtocolPrefix = "AGLoRa-";
+const String bleProtocolTypePoint = "point";
+const String bleProtocolTypeMemory = "memory";
+const String bleProtocolVersion = "&ver=2.2";
+const String bleProtocolParamCRC = "&crc=";
+const String bleProtocolOK = "ok";
+const String bleProtocolError = "error";
+
+const String bleProtocolParamMemorySize = "&memsize=";
+const String bleProtocolParamMemoryOverwrite = "&overwrite=";
+const String bleProtocolParamMemoryIndex = "&index=";
+
+const String bleProtocolDeviceName = "&dev_name=" + String(NAME);
+
+const String bleProtocolDivider = "\r\n";
+
+AGLORA::AGLORA(IMemory *memory, BLE_HM10 *ble)
+{
+  _ble = ble;
+  _memory = memory;
+}
+
+void AGLORA::hello()
+{
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.println(F("[power on]"));
+
+  Serial.print(F("Waiting | "));
+  for (int i = 0; i < 50; i++)
+  {
+    Serial.print(F("#"));
+    delay(50);
+  }
+  Serial.println();
+  Serial.println(F("AGLORA tracker started..."));
+#endif
+}
+
+/// @brief
+/// 1. clear
+/// 2. set name
+/// 3. set default ttl
+/// @param loraDataPacket
+void AGLORA::clearDataPacket(DATA *trackerData)
+{
+  memset(trackerData, 0, sizeof(&trackerData));
+  strcpy(trackerData->name, NAME);
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.println(F("🟢[AGLoRa: time to send your location📍, new loraDataPacket prepared 📦]"));
+#endif
+}
+
+void AGLORA::printPackage(LORADATA *loraDataPacket)
+{
+  // DEBUG_MODE
+#if DEBUG_MODE && DEBUG_AGLORA // dump out what was just received
+  Serial.println(F("🟢[AGLoRa: loraDataPacket now contains ↴]"));
+  Serial.print(F("     Name: "));
+  Serial.print(loraDataPacket->data.name);
+  Serial.print(F(", 🌎 lat: "));
+  Serial.print(loraDataPacket->data.lat, 6);
+  Serial.print(F(", lon: "));
+  Serial.print(loraDataPacket->data.lon, 6);
+
+  if (loraDataPacket->data.gpsValid)
+    Serial.print(F(", GPS 🆗"));
+  else
+    Serial.print(F(", GPS ❌"));
+
+  // Serial.print(F(", sat: "));
+  // Serial.print(loraDataPacket->data.sat);   // example
+  // Serial.print(F(", hdop: "));
+  // Serial.print(loraDataPacket->data.hdop);  // example
+
+  Serial.print(F(", 📆 date: "));
+  Serial.print(loraDataPacket->data.year);
+  Serial.print(F("/"));
+  if (loraDataPacket->data.month < 10)
+    Serial.print(F("0"));
+  Serial.print(loraDataPacket->data.month);
+  Serial.print(F("/"));
+  if (loraDataPacket->data.day < 10)
+    Serial.print(F("0"));
+  Serial.print(loraDataPacket->data.day);
+
+  Serial.print(F(", 🕰️ time: "));
+  Serial.print(loraDataPacket->data.hour);
+  Serial.print(F(":"));
+  if (loraDataPacket->data.minute < 10)
+    Serial.print(F("0"));
+  Serial.print(loraDataPacket->data.minute);
+  Serial.print(F(":"));
+  if (loraDataPacket->data.second < 10)
+    Serial.print(F("0"));
+  Serial.print(loraDataPacket->data.second);
+  Serial.print(F(" (UTC)"));
+
+  Serial.print(F(" 📦 TTL="));
+  Serial.print(loraDataPacket->ttl);
+
+  Serial.println();
+#endif
+}
+
+void AGLORA::getRequest(String request)
+{
+  if (request.length() == 0)
+  {
+    return;
+  }
+
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.println();
+  Serial.print(F("🟢[AGLoRa: 📭 BLE request received <<"));
+  Serial.print(request);
+  Serial.println(F(">> received]"));
+  Serial.println();
+#endif
+
+  if (request.startsWith(F("crc")))
+  {
+    checkMemoryToBLE();
+    return;
+  }
+
+  if (request.startsWith(F("clear")))
+  {
+    _memory->clearAllPositions();
+    checkMemoryToBLE();
+    return;
+  }
+
+  if (request.startsWith(F("all")))
+  {
+    checkMemoryToBLE();
+    sendAllPackagesToBLE();
+    return;
+  }
+
+  if (request.startsWith(F("id")))
+  {
+    request.remove(0, 2);
+    unsigned int index = request.toInt();
+    sendPackageToBLEFromStorage(index);
+
+    return;
+  }
+}
+
+void AGLORA::checkMemoryToBLE()
+{
+  String response = bleProtocolPrefix +
+                    bleProtocolTypeMemory +
+                    bleProtocolVersion;
+  response += bleProtocolParamCRC;
+  response += _memory->checkCRC() ? bleProtocolOK : bleProtocolError;
+  response += bleProtocolDeviceName;
+  response += sendBatteryToPhone();
+  response += bleProtocolParamMemorySize + _memory->getSize();
+  response += bleProtocolParamMemoryIndex + _memory->getIndex();
+  response += bleProtocolParamMemoryOverwrite + _memory->getStorageOverwrite();
+  response += bleProtocolDivider;
+  _ble->send(&response);
+}
+
+void AGLORA::sendPackageToBLE(DATA *trackerData, int index)
+{
+  String response = bleProtocolPrefix +
+                    bleProtocolTypePoint +
+                    bleProtocolVersion;
+
+  response += sendToPhone(trackerData);
+  response += sendBatteryToPhone();
+  response += bleProtocolParamMemoryIndex + index;
+  response += bleProtocolParamCRC;
+  response += _memory->checkCRC(index) ? bleProtocolOK : bleProtocolError;
+  response += bleProtocolDivider;
+
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.print(F("🟢AGLoRa: send point 📦 to BLE → "));
+  Serial.print(response);
+#endif
+
+  _ble->send(&response);
+}
+
+void AGLORA::sendAllPackagesToBLE()
+{
+  unsigned int maxIndex = _memory->getStorageOverwrite() ? _memory->getSize() : _memory->getIndex();
+  for (unsigned int i = 0; i < maxIndex; ++i)
+  {
+#if DEBUG_MODE && DEBUG_AGLORA
+    Serial.print(F("🟢[AGLoRa: loading "));
+    Serial.print(i + 1);
+    Serial.print(F("/"));
+    Serial.print(maxIndex);
+    Serial.print(F(" 📦 from memory ]"));
+#endif
+
+    sendPackageToBLE(_memory->load(i), i);
+  }
+
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.println();
+#endif
+}
+
+void AGLORA::sendPackageToBLEFromStorage(unsigned int index)
+{
+#if DEBUG_MODE && DEBUG_AGLORA
+  Serial.print(F("🟢[AGLoRa: loading 📦  from index "));
+  Serial.print(index);
+  Serial.print(F("]"));
+#endif
+
+  if ((_memory->getStorageOverwrite() == false) && (_memory->getIndex() == 0))
+  {
+#if DEBUG_MODE && DEBUG_AGLORA
+    Serial.println(F("- error 🚨 empty memory 🚨"));
+#endif
+
+    String response = bleProtocolPrefix +
+                      bleProtocolTypeMemory +
+                      bleProtocolVersion;
+    response += bleProtocolParamMemorySize + _memory->getSize();
+    response += bleProtocolParamMemoryIndex + _memory->getIndex();
+    response += bleProtocolParamMemoryOverwrite + _memory->getStorageOverwrite();
+    response += bleProtocolDivider;
+    _ble->send(&response);
+
+    return;
+  }
+
+  unsigned int maxIndex = _memory->getStorageOverwrite() ? _memory->getSize() : _memory->getIndex();
+  if (index > maxIndex - 1)
+  {
+#if DEBUG_MODE && DEBUG_AGLORA
+    Serial.println(F("- error 🚨 index out of range 🚨"));
+#endif
+    return;
+    // TODO: send error
+  }
+
+  sendPackageToBLE(_memory->load(index), index);
+}
+
+void AGLORA::sendLastPackagesToBLE()
+{
+    const unsigned int MAX_TRACKERS = 10; // Max trackers in memory
+    struct TrackerData {
+        char name[NAME_LENGTH];
+        DATA* lastData;
+    };
+    TrackerData lastDataArray[MAX_TRACKERS];
+    unsigned int trackerCount = 0;
+
+    unsigned int maxIndex = _memory->getStorageOverwrite() ? _memory->getSize() : _memory->getIndex();
+
+    for (unsigned int i = 0; i < maxIndex; ++i)
+    {
+        DATA* data = _memory->load(i);
+        if (data == nullptr) continue;
+
+        bool found = false;
+        for (unsigned int j = 0; j < trackerCount; ++j)
+        {
+            if (strncmp(lastDataArray[j].name, data->name, NAME_LENGTH) == 0)
+            {
+                if (isDataMoreRecent(data, lastDataArray[j].lastData))
+                {
+                    lastDataArray[j].lastData = data;
+                }
+                found = true;
+                break;
+            }
+        }
+
+        if (!found && trackerCount < MAX_TRACKERS)
+        {
+            strncpy(lastDataArray[trackerCount].name, data->name, NAME_LENGTH);
+            lastDataArray[trackerCount].lastData = data;
+            trackerCount++;
+        }
+    }
+
+    for (unsigned int i = 0; i < trackerCount; ++i)
+    {
+        sendPackageToBLE(lastDataArray[i].lastData, 0);
+    }
+}
+
+bool AGLORA::isDataMoreRecent(DATA * newData, DATA * oldData)
+{
+    if (newData->year > oldData->year) return true;
+    if (newData->year < oldData->year) return false;
+
+    if (newData->month > oldData->month) return true;
+    if (newData->month < oldData->month) return false;
+
+    if (newData->day > oldData->day) return true;
+    if (newData->day < oldData->day) return false;
+
+    if (newData->hour > oldData->hour) return true;
+    if (newData->hour < oldData->hour) return false;
+
+    if (newData->minute > oldData->minute) return true;
+    if (newData->minute < oldData->minute) return false;
+
+    if (newData->second > oldData->second) return true;
+    if (newData->second < oldData->second) return false;
+
+    return false;
+}
+
+/*
+This is a function that sends data to the app.
+Data packets are sent using OsmAnd-like protocol:
+id=name&lat={0}&lon={1}&timestamp={2}&speed={3}&altitude={4}
+*/
+String sendToPhone(DATA *package) {
+  String result;
+  result += F("&dev_batt=");  //battery of your device
+  result += F("100"); //implement voltage acquisition
+
+  result += F("&name=");  //other tracker's name
+  result += package->name;  //NAME_LENGTH bytes
+
+  result += F("&lat=");       // cordinates
+  result += String(package->lat, 6);  // latitude
+  result += F("&lon=");       // record separator
+  result += String(package->lon, 6);  // longitute
+
+  //Date and time format: 2023-06-07T15:21:00Z
+  result += F("&timestamp=");      // record separator
+  result += package->year + 2000;  // year
+  result += F("-");                // data separator
+  if (package->month < 10) result += F("0");
+  result += package->month;        // month
+  result += F("-");                // data separator
+  if (package->day < 10) result += F("0");
+  result += package->day;          // day
+  result += F("T");                // record separator
+  if (package->hour < 10) result += F("0");
+  result += package->hour;         // hour
+  result += F(":");                // time separator
+  if (package->minute < 10) result += F("0");
+  result += package->minute;       // minute
+  result += F(":");                // time separator
+  if (package->second < 10) result += F("0");
+  result += package->second;       // second
+  result += F("Z");                // UTC
+
+  // Sensors and additional data
+  result += F("&gpsValid=");
+  result += package->gpsValid;  // validity of coordinates  bool
+
+  // Add more data here if you need ...
+  // result += "&speed=";
+  // result += package->speed;
+
+  result += "&battery=";
+  result += package->battery;
+
+  // result += "&C-137-level=";  // data's name in app
+  // result += package->sensor2; // value
+
+  return result;
+}
+
+String sendBatteryToPhone() {
+  String result;
+
+  result += "&dev_bat=";
+  result += 100;
+
+  return result;
+}
+
+// =========================================================================
+// ========================== MAIN PROGRAM =================================
+// =========================================================================
+
 TESTS tests;
 INDICATION indication(GPS_LED, LORA_LED, BLE_LED, MEMORY_LED);
 GPS gps(GPS_PIN_RX, GPS_PIN_TX, GPS_SPEED, &indication);
-LORA lora(LORA_PIN_RX, LORA_PIN_TX, LORA_SPEED, LORA_PIN_AX, LORA_PIN_M0, LORA_PIN_M1, &indication);
+LORA lora(LORA_PIN_RX, LORA_PIN_TX, LORA_PIN_AX, LORA_PIN_M0, LORA_PIN_M1, &indication);
 BLE_HM10 ble;
 
 #if USE_EEPROM_MEMORY
@@ -1895,7 +2260,7 @@ void loop()
 
   // if the time checker is over some prescribed amount
   // let the user know there is no incoming data
-  if ((_timeOfLastReceivedPacket) + BLE_UPDATE_INTERVAL < millis() )
+ if ((_timeOfLastReceivedPacket + BLE_UPDATE_INTERVAL) < millis())
   {
     aglora.checkMemoryToBLE();
     _timeOfLastReceivedPacket = millis();
@@ -1919,12 +2284,11 @@ void processNewData(LORADATA *loraDataPackage)
 {
   if (memory.checkUnique(&loraDataPackage->data)) // Check the name and time of the point
   {
-
     ttl = loraDataPackage->ttl;
 
     addedMemoryIndex = memory.save(&loraDataPackage->data);
     memory.checkCRC();
-    
+
 #if USE_BLE
     aglora.sendPackageToBLE(&loraDataPackage->data, addedMemoryIndex); // upload data to app
 #endif
