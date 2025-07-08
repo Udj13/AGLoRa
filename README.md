@@ -223,3 +223,6 @@ BLE to COM convertor for tests - https://github.com/magdel/ble2com
 
 Aglora Emulator - https://github.com/magdel/agloraemulator
 
+3d model - https://makerworld.com.cn/zh/models/1363168-aglora-lora-gpszhui-zong-he
+
+
